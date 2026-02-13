@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════
-   Repo Detail Page — CI/CD Dashboard  (v4.0)
-   Fetches latest CI run annotations to display detailed stats
+   Repo Detail Page — CI/CD Dashboard  (v5.0 — Static Data)
+   Loads pre-generated static JSON data instead of GitHub API
    ═══════════════════════════════════════════════════════════ */
 'use strict';
 
-const GITHUB_API = 'https://api.github.com';
+const DATA_PATH = 'data';
 let manifest = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -29,10 +29,31 @@ async function loadDetail() {
 
     const owner = manifest.owner;
 
-    // Fetch latest CI workflow runs (only actual CI, not release/copilot/dynamic)
-    const runsUrl = `${GITHUB_API}/repos/${owner}/${repoName}/actions/runs?per_page=20`;
-    const runsData = await fetchJSON(runsUrl);
-    const ciRuns = (runsData.workflow_runs || []).filter(r => {
+    // Load static data — NO GitHub API calls
+    let staticData = null;
+
+    // Try combined data file first
+    try {
+      const combined = await fetchJSON(`${DATA_PATH}/dashboard-data.json`);
+      if (combined?.repos?.[repoName]) {
+        staticData = combined.repos[repoName];
+      }
+    } catch (_) {}
+
+    // Fallback: individual repo file
+    if (!staticData) {
+      try {
+        staticData = await fetchJSON(`${DATA_PATH}/${repoName}.json`);
+      } catch (_) {}
+    }
+
+    if (!staticData || !staticData.runs || staticData.runs.length === 0) {
+      document.getElementById('detail-content').innerHTML = '<div class="loading-detail">No data available for this repo. <a href="index.html">Go back</a></div>';
+      return;
+    }
+
+    // Filter CI runs (exclude release/copilot/dynamic)
+    const ciRuns = staticData.runs.filter(r => {
       const name = (r.name || '').toLowerCase();
       if (name.includes('release')) return false;
       if (name.includes('copilot')) return false;
@@ -42,34 +63,15 @@ async function loadDetail() {
     const latestRun = ciRuns[0];
 
     if (!latestRun) {
-      document.getElementById('detail-content').innerHTML = '<div class="loading-detail">No CI runs found.</div>';
+      document.getElementById('detail-content').innerHTML = '<div class="loading-detail">No CI runs found. <a href="index.html">Go back</a></div>';
       return;
     }
 
-    // Fetch jobs for the latest run
-    const jobsUrl = `${GITHUB_API}/repos/${owner}/${repoName}/actions/runs/${latestRun.id}/jobs`;
-    const jobsData = await fetchJSON(jobsUrl);
-    const jobs = jobsData.jobs || [];
+    // Use jobs from static data for the latest run
+    const jobs = (staticData.jobs || []).filter(j => j.run_id === latestRun.id);
 
-    // Fetch annotations for each job
-    const statsMap = { lint: {}, test: {}, security: {} };
-    for (const job of jobs) {
-      try {
-        const annUrl = `${GITHUB_API}/repos/${owner}/${repoName}/check-runs/${job.id}/annotations`;
-        const annotations = await fetchJSON(annUrl);
-        for (const ann of annotations) {
-          const title = ann.title || '';
-          const msg = ann.message || '';
-          if (title === 'ci_lint' || msg.startsWith('errors=')) {
-            statsMap.lint = parseKeyVal(title === 'ci_lint' ? msg : ann.message);
-          } else if (title === 'ci_test') {
-            statsMap.test = parseKeyVal(msg);
-          } else if (title === 'ci_security') {
-            statsMap.security = parseKeyVal(msg);
-          }
-        }
-      } catch (_) { /* annotations may not be available */ }
-    }
+    // Use pre-computed stats from static data
+    const statsMap = staticData.ciStats || { lint: {}, test: {}, security: {} };
 
     // Render
     renderDetail(repoConfig, latestRun, jobs, statsMap, ciRuns.slice(0, 10));
