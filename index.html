@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI/CD Dashboard — GitHub Shared Workflows</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>" />
+</head>
+<body>
+
+  <!-- ─── Header ─── -->
+  <header>
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="logo">⚡</div>
+        <div>
+          <h1 id="dashboard-title">CI/CD Dashboard</h1>
+          <p class="subtitle" id="dashboard-subtitle">Cross-repo workflow visibility</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="badge" id="data-source-badge">LIVE</span>
+        <span class="last-updated" id="last-updated">—</span>
+        <button class="btn-refresh" id="refresh-btn" title="Refresh now">
+          <span class="refresh-icon">↻</span> Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── Main Content ─── -->
+  <main>
+
+    <!-- Health Summary Strip -->
+    <section class="section" id="section-summary">
+      <div class="section-header">
+        <h2>Health Overview</h2>
+      </div>
+      <div class="summary-strip" id="summary-strip">
+        <div class="summary-card skeleton"></div>
+        <div class="summary-card skeleton"></div>
+        <div class="summary-card skeleton"></div>
+        <div class="summary-card skeleton"></div>
+        <div class="summary-card skeleton"></div>
+      </div>
+    </section>
+
+    <!-- Repo Status Cards -->
+    <section class="section" id="section-repos">
+      <div class="section-header">
+        <h2>Repository Pipelines</h2>
+        <div class="filter-group">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="success">Passing</button>
+          <button class="filter-btn" data-filter="failure">Failing</button>
+        </div>
+      </div>
+      <div class="repo-cards" id="repo-cards">
+        <div class="repo-card skeleton-card"></div>
+        <div class="repo-card skeleton-card"></div>
+        <div class="repo-card skeleton-card"></div>
+      </div>
+    </section>
+
+    <!-- Workflow Timeline -->
+    <section class="section" id="section-timeline">
+      <div class="section-header">
+        <h2>Workflow Timeline</h2>
+        <span class="muted" id="timeline-count"></span>
+      </div>
+      <div class="timeline" id="timeline">
+        <div class="loading-state">Loading timeline...</div>
+      </div>
+    </section>
+
+    <!-- Build Insights -->
+    <section class="section" id="section-insights">
+      <div class="section-header">
+        <h2>Build Insights</h2>
+      </div>
+      <div class="insights-grid" id="insights-grid">
+        <div class="insight-card" id="insight-lang-breakdown">
+          <h3>By Language</h3>
+          <div class="insight-content" id="lang-breakdown"></div>
+        </div>
+        <div class="insight-card" id="insight-workflow-breakdown">
+          <h3>By Workflow</h3>
+          <div class="insight-content" id="workflow-breakdown"></div>
+        </div>
+        <div class="insight-card" id="insight-author-breakdown">
+          <h3>Top Contributors</h3>
+          <div class="insight-content" id="author-breakdown"></div>
+        </div>
+        <div class="insight-card" id="insight-branch-breakdown">
+          <h3>By Branch</h3>
+          <div class="insight-content" id="branch-breakdown"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── Footer ─── -->
+  <footer>
+    <div class="footer-inner">
+      <span>Powered by <a href="https://github.com/mruthyunjaya-lakkappanavar/github-shared-workflows" target="_blank">github-shared-workflows</a></span>
+      <span class="separator">·</span>
+      <span>Data via GitHub REST API</span>
+      <span class="separator">·</span>
+      <span id="footer-version">v2.0</span>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
