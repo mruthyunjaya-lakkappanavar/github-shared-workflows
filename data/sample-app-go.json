@@ -1,7 +1,26 @@
 {
   "repo": "sample-app-go",
-  "updated_at": "2026-02-13T05:50:09Z",
+  "updated_at": "2026-02-13T06:22:55Z",
   "runs": [
+    {
+      "id": 21976991826,
+      "name": "Release",
+      "workflow_name": "Release",
+      "status": "completed",
+      "conclusion": "success",
+      "head_branch": "main",
+      "head_sha": "c94b6f1a5386269ef8c37994561186f45a9bb87d",
+      "event": "push",
+      "created_at": "2026-02-13T06:22:37Z",
+      "updated_at": "2026-02-13T06:22:50Z",
+      "run_started_at": "2026-02-13T06:22:37Z",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-go/actions/runs/21976991826",
+      "run_number": 4,
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 21975580795,
       "name": "Release",
