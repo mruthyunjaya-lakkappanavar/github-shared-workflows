@@ -1,6 +1,24 @@
 {
-  "generated_at": "2026-02-13T11:05:15Z",
+  "generated_at": "2026-02-13T11:39:04Z",
   "runs": [
+    {
+      "id": 21985017712,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712",
+      "created_at": "2026-02-13T11:22:32Z",
+      "updated_at": "2026-02-13T11:23:12Z",
+      "head_branch": "demo/test-failure",
+      "head_sha": "a131f0c65bdee41f5128369cd227b8e7cb5780ce",
+      "event": "pull_request_target",
+      "run_number": 14,
+      "run_started_at": "2026-02-13T11:22:32Z",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 21981885879,
       "name": "CI",
@@ -288,27 +306,77 @@
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    },
+    }
+  ],
+  "jobs": [
     {
-      "id": 21975344071,
-      "name": "CI",
+      "id": 63516930114,
+      "name": "ci / Security Scan",
       "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21975344071",
-      "created_at": "2026-02-13T05:02:19Z",
-      "updated_at": "2026-02-13T05:02:52Z",
-      "head_branch": "main",
-      "head_sha": "5df95ac7667c71adc0ff643401b6928bd809fbd6",
-      "event": "push",
-      "run_number": 2,
-      "run_started_at": "2026-02-13T05:02:19Z",
+      "conclusion": "failure",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712/job/63516930114",
+      "started_at": "2026-02-13T11:22:35Z",
+      "completed_at": "2026-02-13T11:23:05Z",
+      "run_id": 21985017712,
+      "run_number": 14,
+      "head_branch": "demo/test-failure",
+      "event": "pull_request_target",
       "actor": {
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    }
-  ],
-  "jobs": [
+    },
+    {
+      "id": 63516930133,
+      "name": "ci / Test",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712/job/63516930133",
+      "started_at": "2026-02-13T11:22:35Z",
+      "completed_at": "2026-02-13T11:22:51Z",
+      "run_id": 21985017712,
+      "run_number": 14,
+      "head_branch": "demo/test-failure",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 63516930154,
+      "name": "ci / Lint",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712/job/63516930154",
+      "started_at": "2026-02-13T11:22:36Z",
+      "completed_at": "2026-02-13T11:22:57Z",
+      "run_id": 21985017712,
+      "run_number": 14,
+      "head_branch": "demo/test-failure",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 63516981399,
+      "name": "ci / CI Status",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712/job/63516981399",
+      "started_at": "2026-02-13T11:23:08Z",
+      "completed_at": "2026-02-13T11:23:12Z",
+      "run_id": 21985017712,
+      "run_number": 14,
+      "head_branch": "demo/test-failure",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 63506283509,
       "name": "ci / Test",
@@ -444,74 +512,6 @@
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    },
-    {
-      "id": 63502426032,
-      "name": "ci / Lint",
-      "status": "completed",
-      "conclusion": "failure",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21980740216/job/63502426032",
-      "started_at": "2026-02-13T08:56:04Z",
-      "completed_at": "2026-02-13T08:56:24Z",
-      "run_id": 21980740216,
-      "run_number": 11,
-      "head_branch": "demo/lint-failure",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 63502426049,
-      "name": "ci / Test",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21980740216/job/63502426049",
-      "started_at": "2026-02-13T08:56:04Z",
-      "completed_at": "2026-02-13T08:56:25Z",
-      "run_id": 21980740216,
-      "run_number": 11,
-      "head_branch": "demo/lint-failure",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 63502426054,
-      "name": "ci / Security Scan",
-      "status": "completed",
-      "conclusion": "failure",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21980740216/job/63502426054",
-      "started_at": "2026-02-13T08:56:04Z",
-      "completed_at": "2026-02-13T08:56:39Z",
-      "run_id": 21980740216,
-      "run_number": 11,
-      "head_branch": "demo/lint-failure",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 63502483820,
-      "name": "ci / CI Status",
-      "status": "completed",
-      "conclusion": "failure",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21980740216/job/63502483820",
-      "started_at": "2026-02-13T08:56:41Z",
-      "completed_at": "2026-02-13T08:56:46Z",
-      "run_id": 21980740216,
-      "run_number": 11,
-      "head_branch": "demo/lint-failure",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
     }
   ],
   "ciStats": {
@@ -522,10 +522,10 @@
       "total": "0",
       "passed": "0",
       "failed": "0",
-      "coverage": "100%"
+      "coverage": "79%"
     },
     "security": {
-      "sast": "0",
+      "sast": "1",
       "deps": "0",
       "critical": "0",
       "high": "0",
