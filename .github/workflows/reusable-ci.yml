@@ -96,17 +96,19 @@ jobs:
           if [ "${{ inputs.language }}" = "python" ]; then
             OUTPUT=$(flake8 . --count --max-complexity=10 --max-line-length=127 --statistics 2>&1)
             EXIT_CODE=$?
-            ERROR_COUNT=$(echo "$OUTPUT" | tail -1 | grep -oE '^[0-9]+' || echo "0")
+            ERROR_COUNT=$(echo "$OUTPUT" | tail -1 | grep -oE '^[0-9]+' || true)
+            ERROR_COUNT=${ERROR_COUNT:-0}
 
           elif [ "${{ inputs.language }}" = "node" ]; then
             OUTPUT=$(npx eslint . --max-warnings=0 2>&1)
             EXIT_CODE=$?
             if [ "$EXIT_CODE" -ne 0 ]; then
-              ERROR_COUNT=$(echo "$OUTPUT" | grep -oE '[0-9]+ error' | head -1 | grep -oE '[0-9]+' || echo "1")
+              ERROR_COUNT=$(echo "$OUTPUT" | grep -oE '[0-9]+ error' | head -1 | grep -oE '[0-9]+' || true)
+              ERROR_COUNT=${ERROR_COUNT:-1}
             fi
 
           elif [ "${{ inputs.language }}" = "go" ]; then
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" 2>/dev/null
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2 2>/dev/null
             export PATH="$(go env GOPATH)/bin:$PATH"
             OUTPUT=$(golangci-lint run --out-format=line-number 2>&1)
             EXIT_CODE=$?
@@ -198,6 +200,7 @@ jobs:
       total: ${{ steps.result.outputs.total }}
       passed: ${{ steps.result.outputs.passed }}
       failed: ${{ steps.result.outputs.failed }}
+      coverage: ${{ steps.result.outputs.coverage }}
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     defaults:
@@ -236,42 +239,67 @@ jobs:
         shell: bash
         run: |
           set +e
-          TOTAL=0; PASSED=0; FAILED=0; EXIT_CODE=0
+          TOTAL=0; PASSED=0; FAILED=0; EXIT_CODE=0; COVERAGE="N/A"
 
           if [ "${{ inputs.language }}" = "python" ]; then
-            pytest --junitxml=test-results.xml --tb=short -v 2>&1 | tee test-output.txt
+            pytest --junitxml=test-results.xml --tb=short -v --cov=src --cov-report=term-missing 2>&1 | tee test-output.txt
             EXIT_CODE=${PIPESTATUS[0]}
             if [ -f test-results.xml ]; then
               TOTAL=$(python3 -c "
           import xml.etree.ElementTree as ET
           r = ET.parse('test-results.xml').getroot()
           print(r.attrib.get('tests', '0'))
-          " 2>/dev/null || echo "0")
+          " 2>/dev/null || true)
+              TOTAL=${TOTAL:-0}
               FAIL_COUNT=$(python3 -c "
           import xml.etree.ElementTree as ET
           r = ET.parse('test-results.xml').getroot()
           f = int(r.attrib.get('failures', '0'))
           e = int(r.attrib.get('errors', '0'))
           print(f + e)
-          " 2>/dev/null || echo "0")
+          " 2>/dev/null || true)
+              FAIL_COUNT=${FAIL_COUNT:-0}
               FAILED=${FAIL_COUNT:-0}
               PASSED=$((TOTAL - FAILED))
             fi
+            # Extract coverage percentage
+            COV_LINE=$(grep "^TOTAL" test-output.txt | tail -1)
+            if [ -n "$COV_LINE" ]; then
+              COVERAGE=$(echo "$COV_LINE" | grep -oE '[0-9]+%' | tail -1 || true)
+              COVERAGE=${COVERAGE:-N/A}
+            fi
 
           elif [ "${{ inputs.language }}" = "node" ]; then
-            npx jest --ci --verbose 2>&1 | tee test-output.txt
+            npx jest --ci --verbose --coverage 2>&1 | tee test-output.txt
             EXIT_CODE=${PIPESTATUS[0]}
             SUMMARY=$(grep "Tests:" test-output.txt | tail -1)
-            TOTAL=$(echo "$SUMMARY" | grep -oE '[0-9]+ total' | grep -oE '[0-9]+' || echo "0")
-            PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
-            FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
+            TOTAL=$(echo "$SUMMARY" | grep -oE '[0-9]+ total' | grep -oE '[0-9]+' || true)
+            TOTAL=${TOTAL:-0}
+            PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || true)
+            PASSED=${PASSED:-0}
+            FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || true)
+            FAILED=${FAILED:-0}
+            # Extract coverage from jest output (All files line)
+            COV_LINE=$(grep "All files" test-output.txt | head -1)
+            if [ -n "$COV_LINE" ]; then
+              COVERAGE=$(echo "$COV_LINE" | awk -F'|' '{gsub(/ /,"",$2); print $2}' || true)
+              COVERAGE=${COVERAGE:-N/A}
+              if [ "$COVERAGE" != "N/A" ]; then COVERAGE="${COVERAGE}%"; fi
+            fi
 
           elif [ "${{ inputs.language }}" = "go" ]; then
             go test -v -race -coverprofile=coverage.out ./... 2>&1 | tee test-output.txt
             EXIT_CODE=${PIPESTATUS[0]}
-            PASSED=$(grep -c "^--- PASS" test-output.txt || echo "0")
-            FAILED=$(grep -c "^--- FAIL" test-output.txt || echo "0")
+            PASSED=$(grep -c "^--- PASS" test-output.txt || true)
+            PASSED=${PASSED:-0}
+            FAILED=$(grep -c "^--- FAIL" test-output.txt || true)
+            FAILED=${FAILED:-0}
             TOTAL=$((PASSED + FAILED))
+            # Extract coverage from go test output
+            if [ -f coverage.out ]; then
+              COVERAGE=$(go tool cover -func=coverage.out 2>/dev/null | grep "^total:" | awk '{print $NF}' || true)
+              COVERAGE=${COVERAGE:-N/A}
+            fi
           fi
 
           TOTAL=${TOTAL:-0}; PASSED=${PASSED:-0}; FAILED=${FAILED:-0}
@@ -279,6 +307,7 @@ jobs:
           echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
           echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
 
       - name: Set result
         id: result
@@ -292,6 +321,7 @@ jobs:
           echo "total=${{ steps.tests.outputs.total }}" >> "$GITHUB_OUTPUT"
           echo "passed=${{ steps.tests.outputs.passed }}" >> "$GITHUB_OUTPUT"
           echo "failed=${{ steps.tests.outputs.failed }}" >> "$GITHUB_OUTPUT"
+          echo "coverage=${{ steps.tests.outputs.coverage }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test results
         if: always()
@@ -390,7 +420,8 @@ jobs:
               d = json.load(f)
           results = d.get('results') or []
           print(len(results))
-          " 2>/dev/null || echo "0")
+          " 2>/dev/null || true)
+              FINDINGS=${FINDINGS:-0}
             fi
 
           elif [ "${{ inputs.language }}" = "node" ]; then
@@ -399,7 +430,8 @@ jobs:
             EC=$?
             echo "$OUTPUT"
             if [ "$EC" -ne 0 ]; then
-              FINDINGS=$(echo "$OUTPUT" | grep -cE "error|warning" || echo "1")
+              FINDINGS=$(echo "$OUTPUT" | grep -cE "error|warning" || true)
+              FINDINGS=${FINDINGS:-1}
             fi
 
           elif [ "${{ inputs.language }}" = "go" ]; then
@@ -413,7 +445,8 @@ jobs:
               d = json.load(f)
           issues = d.get('Issues') or []
           print(len(issues))
-          " 2>/dev/null || echo "0")
+          " 2>/dev/null || true)
+              FINDINGS=${FINDINGS:-0}
             fi
           fi
 
@@ -432,7 +465,8 @@ jobs:
             pip-audit --desc --format columns 2>&1 | tee pip-audit-output.txt
             PIP_EXIT=${PIPESTATUS[0]}
             if [ "$PIP_EXIT" -ne 0 ]; then
-              DEP_FINDINGS=$(grep -cE "^[a-zA-Z]" pip-audit-output.txt || echo "1")
+              DEP_FINDINGS=$(grep -cE "^[a-zA-Z]" pip-audit-output.txt || true)
+              DEP_FINDINGS=${DEP_FINDINGS:-1}
             fi
 
           elif [ "${{ inputs.language }}" = "node" ]; then
@@ -440,7 +474,8 @@ jobs:
             npm audit 2>&1 | tee npm-audit-output.txt
             NPM_EXIT=${PIPESTATUS[0]}
             if [ "$NPM_EXIT" -ne 0 ]; then
-              DEP_FINDINGS=$(grep -cE "Severity:" npm-audit-output.txt || echo "1")
+              DEP_FINDINGS=$(grep -cE "Severity:" npm-audit-output.txt || true)
+              DEP_FINDINGS=${DEP_FINDINGS:-1}
             fi
 
           elif [ "${{ inputs.language }}" = "go" ]; then
@@ -448,7 +483,8 @@ jobs:
             govulncheck ./... 2>&1 | tee govulncheck-output.txt
             GOV_EXIT=${PIPESTATUS[0]}
             if [ "$GOV_EXIT" -ne 0 ]; then
-              DEP_FINDINGS=$(grep -c "Vulnerability" govulncheck-output.txt || echo "1")
+              DEP_FINDINGS=$(grep -c "Vulnerability" govulncheck-output.txt || true)
+              DEP_FINDINGS=${DEP_FINDINGS:-1}
             fi
           fi
 
@@ -478,10 +514,14 @@ jobs:
           TRIVY_FILE="trivy-results.json"
           CRITICAL=0; HIGH=0; MEDIUM=0; LOW=0
           if [ -f "$TRIVY_FILE" ]; then
-            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
-            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
-            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
-            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$TRIVY_FILE" 2>/dev/null || true)
+            CRITICAL=${CRITICAL:-0}
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$TRIVY_FILE" 2>/dev/null || true)
+            HIGH=${HIGH:-0}
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$TRIVY_FILE" 2>/dev/null || true)
+            MEDIUM=${MEDIUM:-0}
+            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$TRIVY_FILE" 2>/dev/null || true)
+            LOW=${LOW:-0}
           fi
 
           TOTAL_FINDINGS=$((SAST + DEPS + CRITICAL + HIGH + MEDIUM + LOW))
@@ -597,6 +637,7 @@ jobs:
             const testTotal    = '${{ needs.test.outputs.total }}'  || '0';
             const testPassed   = '${{ needs.test.outputs.passed }}' || '0';
             const testFailed   = '${{ needs.test.outputs.failed }}' || '0';
+            const testCoverage = '${{ needs.test.outputs.coverage }}' || 'N/A';
             const sastFindings = '${{ needs.security.outputs.sast_findings }}' || '0';
             const depFindings  = '${{ needs.security.outputs.dep_findings }}'  || '0';
             const vulnCritical = '${{ needs.security.outputs.critical }}' || '0';
@@ -612,8 +653,9 @@ jobs:
               '',
               '| Check | Status | Details |',
               '|-------|--------|---------|',
-              '| **Lint** | ' + icon(lintResult) + ' | ' + lintErrors + ' error(s) |',
+              '| **Lint** | ' + icon(lintResult) + ' | ' + (lintResult === 'success' ? 'All OK' : lintErrors + ' error(s)') + ' |',
               '| **Tests** | ' + icon(testResult) + ' | ' + testTotal + ' total, ' + testPassed + ' passed, ' + testFailed + ' failed |',
+              '| **Coverage** | 📊 | ' + testCoverage + ' |',
               '| **SAST** | ' + icon(secResult) + ' | ' + sastFindings + ' finding(s) |',
               '| **Dependencies** | ' + icon(secResult) + ' | ' + depFindings + ' issue(s) |',
               '| **Vulnerabilities** | ' + icon(secResult) + ' | ' + vulnCritical + ' critical, ' + vulnHigh + ' high, ' + vulnMedium + ' medium, ' + vulnLow + ' low |',
