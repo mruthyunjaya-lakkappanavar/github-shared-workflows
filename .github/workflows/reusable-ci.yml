@@ -48,6 +48,9 @@ jobs:
     name: Lint
     if: ${{ inputs.enable_lint }}
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      error_count: ${{ steps.result.outputs.error_count }}
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     defaults:
@@ -57,6 +60,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup toolchain
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
@@ -64,7 +69,6 @@ jobs:
           language: ${{ inputs.language }}
           language_version: ${{ inputs.language_version }}
 
-      # ── Install Dependencies ──
       - name: Install Python dependencies
         if: inputs.language == 'python'
         run: |
@@ -80,101 +84,98 @@ jobs:
         if: inputs.language == 'go'
         run: go mod download
 
-      # ── Lint per language ──
-      - name: Lint with flake8
-        id: lint-python
-        if: inputs.language == 'python'
-        continue-on-error: true
+      - name: Run linter
+        id: lint
+        shell: bash
         run: |
           set +e
-          OUTPUT=$(flake8 . --count --max-complexity=10 --max-line-length=127 --statistics 2>&1)
-          EXIT_CODE=$?
+          ERROR_COUNT=0
+          OUTPUT=""
+          EXIT_CODE=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            OUTPUT=$(flake8 . --count --max-complexity=10 --max-line-length=127 --statistics 2>&1)
+            EXIT_CODE=$?
+            ERROR_COUNT=$(echo "$OUTPUT" | tail -1 | grep -oE '^[0-9]+' || echo "0")
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            OUTPUT=$(npx eslint . --max-warnings=0 2>&1)
+            EXIT_CODE=$?
+            if [ "$EXIT_CODE" -ne 0 ]; then
+              ERROR_COUNT=$(echo "$OUTPUT" | grep -oE '[0-9]+ error' | head -1 | grep -oE '[0-9]+' || echo "1")
+            fi
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" 2>/dev/null
+            export PATH="$(go env GOPATH)/bin:$PATH"
+            OUTPUT=$(golangci-lint run --out-format=line-number 2>&1)
+            EXIT_CODE=$?
+            if [ "$EXIT_CODE" -ne 0 ]; then
+              ERROR_COUNT=$(echo "$OUTPUT" | wc -l | tr -d ' ')
+            fi
+          fi
+
           echo "$OUTPUT"
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
-          # Save output for PR comment
+          echo "error_count=${ERROR_COUNT:-0}" >> "$GITHUB_OUTPUT"
           {
-            echo "output<<LINT_EOF"
-            echo "$OUTPUT"
-            echo "LINT_EOF"
+            echo "output<<__LINT_DELIM__"
+            echo "$OUTPUT" | head -100
+            echo "__LINT_DELIM__"
           } >> "$GITHUB_OUTPUT"
-          exit $EXIT_CODE
 
-      - name: Lint with ESLint
-        id: lint-node
-        if: inputs.language == 'node'
-        continue-on-error: true
+      - name: Set result
+        id: result
+        if: always()
         run: |
-          set +e
-          OUTPUT=$(npx eslint . --max-warnings=0 2>&1)
-          EXIT_CODE=$?
-          echo "$OUTPUT"
-          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
-          {
-            echo "output<<LINT_EOF"
-            echo "$OUTPUT"
-            echo "LINT_EOF"
-          } >> "$GITHUB_OUTPUT"
-          exit $EXIT_CODE
+          if [ "${{ steps.lint.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+          echo "error_count=${{ steps.lint.outputs.error_count }}" >> "$GITHUB_OUTPUT"
 
-      - name: Lint with golangci-lint
-        id: lint-go
-        if: inputs.language == 'go'
-        continue-on-error: true
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --out-format=line-number
-
-      # ── PR Comment on lint failure ──
       - name: Comment on PR if lint failed
-        if: >
-          failure() &&
-          github.event_name == 'pull_request'
+        if: |
+          steps.lint.outputs.exit_code != '0' &&
+          (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
-            const lang = '${{ inputs.language }}';
-            let lintOutput = '';
-            if (lang === 'python') {
-              lintOutput = `${{ steps.lint-python.outputs.output || 'See workflow run for details.' }}`;
-            } else if (lang === 'node') {
-              lintOutput = `${{ steps.lint-node.outputs.output || 'See workflow run for details.' }}`;
-            } else {
-              lintOutput = 'See workflow run for details.';
+            const output = process.env.LINT_OUTPUT.substring(0, 60000);
+            const body = [
+              '## ❌ Lint Failed',
+              '',
+              '**Language:** `${{ inputs.language }}`',
+              '**Errors:** ${{ steps.lint.outputs.error_count }}',
+              '',
+              '<details>',
+              '<summary>Lint Output</summary>',
+              '',
+              '```',
+              output,
+              '```',
+              '</details>',
+              '',
+              '> Fix the lint issues and push again.'
+            ].join('\n');
+            const prNumber = context.payload.pull_request?.number;
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
             }
+        env:
+          LINT_OUTPUT: ${{ steps.lint.outputs.output }}
 
-            const body = `## ❌ Lint Failed
-
-            **Language:** \`${lang}\`
-            **Workflow:** [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            <details>
-            <summary>Lint Output</summary>
-
-            \`\`\`
-            ${lintOutput.substring(0, 60000)}
-            \`\`\`
-            </details>
-
-            > Fix the lint issues and push again.`;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
-
-      # ── Final lint status ──
-      - name: Fail if lint had errors
-        if: >
-          (inputs.language == 'python' && steps.lint-python.outcome == 'failure') ||
-          (inputs.language == 'node' && steps.lint-node.outcome == 'failure') ||
-          (inputs.language == 'go' && steps.lint-go.outcome == 'failure')
+      - name: Fail if lint errors
+        if: steps.lint.outputs.exit_code != '0'
         run: exit 1
 
-      # ── Slack notify ──
       - name: Notify Slack on lint failure
         if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
@@ -192,6 +193,11 @@ jobs:
     name: Test
     if: ${{ inputs.enable_test }}
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      total: ${{ steps.result.outputs.total }}
+      passed: ${{ steps.result.outputs.passed }}
+      failed: ${{ steps.result.outputs.failed }}
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     defaults:
@@ -201,6 +207,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup toolchain
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
@@ -208,7 +216,6 @@ jobs:
           language: ${{ inputs.language }}
           language_version: ${{ inputs.language_version }}
 
-      # ── Install Dependencies ──
       - name: Install Python dependencies
         if: inputs.language == 'python'
         run: |
@@ -224,22 +231,68 @@ jobs:
         if: inputs.language == 'go'
         run: go mod download
 
-      # ── Test per language ──
-      - name: Run pytest
-        if: inputs.language == 'python'
-        run: pytest --junitxml=test-results.xml --tb=short -v
-
-      - name: Run Jest
-        if: inputs.language == 'node'
-        run: npx jest --ci --reporters=default --reporters=jest-junit || npm test
-
-      - name: Run Go tests
-        if: inputs.language == 'go'
+      - name: Run tests
+        id: tests
+        shell: bash
         run: |
-          go test -v -race -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out
+          set +e
+          TOTAL=0; PASSED=0; FAILED=0; EXIT_CODE=0
 
-      # ── Upload test results ──
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pytest --junitxml=test-results.xml --tb=short -v 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+            if [ -f test-results.xml ]; then
+              TOTAL=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          r = ET.parse('test-results.xml').getroot()
+          print(r.attrib.get('tests', '0'))
+          " 2>/dev/null || echo "0")
+              FAIL_COUNT=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          r = ET.parse('test-results.xml').getroot()
+          f = int(r.attrib.get('failures', '0'))
+          e = int(r.attrib.get('errors', '0'))
+          print(f + e)
+          " 2>/dev/null || echo "0")
+              FAILED=${FAIL_COUNT:-0}
+              PASSED=$((TOTAL - FAILED))
+            fi
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npx jest --ci --verbose 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+            SUMMARY=$(grep "Tests:" test-output.txt | tail -1)
+            TOTAL=$(echo "$SUMMARY" | grep -oE '[0-9]+ total' | grep -oE '[0-9]+' || echo "0")
+            PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
+            FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go test -v -race -coverprofile=coverage.out ./... 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+            PASSED=$(grep -c "^--- PASS" test-output.txt || echo "0")
+            FAILED=$(grep -c "^--- FAIL" test-output.txt || echo "0")
+            TOTAL=$((PASSED + FAILED))
+          fi
+
+          TOTAL=${TOTAL:-0}; PASSED=${PASSED:-0}; FAILED=${FAILED:-0}
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+          echo "total=${{ steps.tests.outputs.total }}" >> "$GITHUB_OUTPUT"
+          echo "passed=${{ steps.tests.outputs.passed }}" >> "$GITHUB_OUTPUT"
+          echo "failed=${{ steps.tests.outputs.failed }}" >> "$GITHUB_OUTPUT"
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -247,11 +300,14 @@ jobs:
           name: test-results-${{ inputs.language }}
           path: |
             **/test-results.xml
-            **/junit.xml
+            **/test-output.txt
             **/coverage.out
           retention-days: 30
 
-      # ── Slack notify ──
+      - name: Fail if tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
       - name: Notify Slack on test failure
         if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
@@ -269,6 +325,14 @@ jobs:
     name: Security Scan
     if: ${{ inputs.enable_security_scan }}
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      sast_findings: ${{ steps.result.outputs.sast_findings }}
+      dep_findings: ${{ steps.result.outputs.dep_findings }}
+      critical: ${{ steps.result.outputs.critical }}
+      high: ${{ steps.result.outputs.high }}
+      medium: ${{ steps.result.outputs.medium }}
+      low: ${{ steps.result.outputs.low }}
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     defaults:
@@ -278,6 +342,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup toolchain
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
@@ -285,18 +351,19 @@ jobs:
           language: ${{ inputs.language }}
           language_version: ${{ inputs.language_version }}
 
-      # ── Install Dependencies ──
       - name: Install Python dependencies
         if: inputs.language == 'python'
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          pip install bandit safety
+          pip install bandit pip-audit
 
       - name: Install Node dependencies
         if: inputs.language == 'node'
-        run: npm ci
+        run: |
+          npm ci
+          npm install --no-save eslint-plugin-security 2>/dev/null || true
 
       - name: Install Go dependencies
         if: inputs.language == 'go'
@@ -305,69 +372,143 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      # ═── SAST (Static Application Security Testing) ══
-      - name: "SAST: Bandit (Python)"
-        if: inputs.language == 'python'
-        continue-on-error: true
-        id: bandit
+      - name: SAST Scan
+        id: sast
+        shell: bash
         run: |
-          echo "## Bandit SAST Scan"
-          bandit -r src/ -f json -o bandit-report.json --severity-level medium || true
-          bandit -r src/ --severity-level medium -f screen
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set +e
+          FINDINGS=0
 
-      - name: "SAST: ESLint Security Plugin (Node)"
-        if: inputs.language == 'node'
-        continue-on-error: true
-        id: eslint-security
+          if [ "${{ inputs.language }}" = "python" ]; then
+            echo "=== Bandit SAST Scan ==="
+            bandit -r src/ -f json -o bandit-report.json 2>&1
+            bandit -r src/ -f screen 2>&1
+            if [ -f bandit-report.json ]; then
+              FINDINGS=$(python3 -c "
+          import json
+          with open('bandit-report.json') as f:
+              d = json.load(f)
+          results = d.get('results') or []
+          print(len(results))
+          " 2>/dev/null || echo "0")
+            fi
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            echo "=== ESLint Security Scan ==="
+            OUTPUT=$(npx eslint . --rule '{"no-eval":"error"}' --max-warnings=0 2>&1)
+            EC=$?
+            echo "$OUTPUT"
+            if [ "$EC" -ne 0 ]; then
+              FINDINGS=$(echo "$OUTPUT" | grep -cE "error|warning" || echo "1")
+            fi
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            echo "=== gosec SAST Scan ==="
+            gosec -fmt json -out gosec-report.json ./... 2>&1
+            gosec -fmt text ./... 2>&1
+            if [ -f gosec-report.json ]; then
+              FINDINGS=$(python3 -c "
+          import json
+          with open('gosec-report.json') as f:
+              d = json.load(f)
+          issues = d.get('Issues') or []
+          print(len(issues))
+          " 2>/dev/null || echo "0")
+            fi
+          fi
+
+          echo "findings=${FINDINGS:-0}" >> "$GITHUB_OUTPUT"
+          echo "::notice::SAST found $FINDINGS finding(s)"
+
+      - name: Dependency Audit
+        id: deps
+        shell: bash
         run: |
-          echo "## ESLint Security Scan"
-          npm install --no-save eslint-plugin-security 2>/dev/null || true
-          npx eslint . --rule '{ "no-eval": "error" }' --max-warnings=0 2>&1 || true
+          set +e
+          DEP_FINDINGS=0
 
-      - name: "SAST: gosec (Go)"
-        if: inputs.language == 'go'
-        continue-on-error: true
-        id: gosec
-        run: |
-          echo "## gosec SAST Scan"
-          gosec -fmt json -out gosec-report.json ./... || true
-          gosec -fmt text ./...
+          if [ "${{ inputs.language }}" = "python" ]; then
+            echo "=== pip-audit ==="
+            pip-audit --desc --format columns 2>&1 | tee pip-audit-output.txt
+            PIP_EXIT=${PIPESTATUS[0]}
+            if [ "$PIP_EXIT" -ne 0 ]; then
+              DEP_FINDINGS=$(grep -cE "^[a-zA-Z]" pip-audit-output.txt || echo "1")
+            fi
 
-      # ═── Dependency Vulnerability Audit ══
-      - name: "Deps: safety check (Python)"
-        if: inputs.language == 'python'
-        continue-on-error: true
-        run: |
-          echo "## Python Dependency Audit"
-          pip install pip-audit
-          pip-audit --desc --format columns || true
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            echo "=== npm audit ==="
+            npm audit 2>&1 | tee npm-audit-output.txt
+            NPM_EXIT=${PIPESTATUS[0]}
+            if [ "$NPM_EXIT" -ne 0 ]; then
+              DEP_FINDINGS=$(grep -cE "Severity:" npm-audit-output.txt || echo "1")
+            fi
 
-      - name: "Deps: npm audit (Node)"
-        if: inputs.language == 'node'
-        continue-on-error: true
-        run: |
-          echo "## Node Dependency Audit"
-          npm audit --audit-level=high || true
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            echo "=== govulncheck ==="
+            govulncheck ./... 2>&1 | tee govulncheck-output.txt
+            GOV_EXIT=${PIPESTATUS[0]}
+            if [ "$GOV_EXIT" -ne 0 ]; then
+              DEP_FINDINGS=$(grep -c "Vulnerability" govulncheck-output.txt || echo "1")
+            fi
+          fi
 
-      - name: "Deps: govulncheck (Go)"
-        if: inputs.language == 'go'
-        continue-on-error: true
-        run: |
-          echo "## Go Dependency Audit"
-          govulncheck ./...
+          echo "findings=${DEP_FINDINGS:-0}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Dependency audit found $DEP_FINDINGS issue(s)"
 
-      # ═── Trivy filesystem scan (all languages) ══
-      - name: "Trivy: filesystem vulnerability scan"
+      - name: Trivy filesystem vulnerability scan
         uses: aquasecurity/trivy-action@0.30.0
         with:
           scan-type: "fs"
           scan-ref: ${{ inputs.working_directory }}
-          format: "table"
-          exit-code: "1"
-          severity: "CRITICAL,HIGH"
+          format: "json"
+          output: "trivy-results.json"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
 
-      # ── Upload security reports ──
+      - name: Aggregate security results
+        id: result
+        if: always()
+        shell: bash
+        run: |
+          SAST="${{ steps.sast.outputs.findings }}"
+          DEPS="${{ steps.deps.outputs.findings }}"
+          SAST=${SAST:-0}
+          DEPS=${DEPS:-0}
+
+          TRIVY_FILE="trivy-results.json"
+          CRITICAL=0; HIGH=0; MEDIUM=0; LOW=0
+          if [ -f "$TRIVY_FILE" ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
+            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$TRIVY_FILE" 2>/dev/null || echo "0")
+          fi
+
+          TOTAL_FINDINGS=$((SAST + DEPS + CRITICAL + HIGH + MEDIUM + LOW))
+
+          echo "sast_findings=$SAST" >> "$GITHUB_OUTPUT"
+          echo "dep_findings=$DEPS" >> "$GITHUB_OUTPUT"
+          echo "critical=${CRITICAL:-0}" >> "$GITHUB_OUTPUT"
+          echo "high=${HIGH:-0}" >> "$GITHUB_OUTPUT"
+          echo "medium=${MEDIUM:-0}" >> "$GITHUB_OUTPUT"
+          echo "low=${LOW:-0}" >> "$GITHUB_OUTPUT"
+
+          echo "=== Security Summary ==="
+          echo "SAST findings:     $SAST"
+          echo "Dependency issues: $DEPS"
+          echo "Trivy Critical:    $CRITICAL"
+          echo "Trivy High:        $HIGH"
+          echo "Trivy Medium:      $MEDIUM"
+          echo "Trivy Low:         $LOW"
+          echo "Total findings:    $TOTAL_FINDINGS"
+
+          if [ "$TOTAL_FINDINGS" -gt 0 ]; then
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+            echo "::error::Security scan found $TOTAL_FINDINGS issue(s)"
+          else
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload security reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -376,10 +517,19 @@ jobs:
           path: |
             **/bandit-report.json
             **/gosec-report.json
+            **/trivy-results.json
+            **/pip-audit-output.txt
+            **/npm-audit-output.txt
+            **/govulncheck-output.txt
           retention-days: 30
           if-no-files-found: ignore
 
-      # ── Slack notify ──
+      - name: Fail if security findings
+        if: steps.result.outputs.status == 'failure'
+        run: |
+          echo "Security scan found issues. See summary above."
+          exit 1
+
       - name: Notify Slack on security failure
         if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
@@ -390,29 +540,33 @@ jobs:
           run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           message: "Security scan found issues for ${{ inputs.language }}"
 
-      # ── PR Comment on security findings ──
-      - name: Comment on PR if security scan failed
-        if: >
+      - name: Comment on PR if security failed
+        if: |
           failure() &&
-          github.event_name == 'pull_request'
+          (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
-            const body = `## 🛡️ Security Scan Failed
-
-            **Language:** \`${{ inputs.language }}\`
-            **Workflow:** [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            The security scan detected vulnerabilities (SAST, dependency audit, or Trivy).
-            Please review the workflow run for details and fix before merging.`;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+            const body = [
+              '## 🛡️ Security Scan Failed',
+              '',
+              '**Language:** `${{ inputs.language }}`',
+              '**SAST Findings:** ${{ steps.sast.outputs.findings }}',
+              '**Dependency Issues:** ${{ steps.deps.outputs.findings }}',
+              '**Trivy:** ${{ steps.result.outputs.critical }} critical, ${{ steps.result.outputs.high }} high, ${{ steps.result.outputs.medium }} medium, ${{ steps.result.outputs.low }} low',
+              '',
+              '[View Full Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+            ].join('\n');
+            const prNumber = context.payload.pull_request?.number;
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
 
   # ═══════════════════════════════════════════════════════════
   #  JOB 4 — CI Summary (runs after all jobs)
@@ -426,19 +580,72 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
+      - name: Post CI summary on PR
+        if: |
+          github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const icon = (s) => s === 'success' ? '✅' : s === 'failure' ? '❌' : s === 'skipped' ? '⏭️' : '⏳';
+
+            const lintResult = '${{ needs.lint.result }}';
+            const testResult = '${{ needs.test.result }}';
+            const secResult  = '${{ needs.security.result }}';
+
+            const lintErrors   = '${{ needs.lint.outputs.error_count }}' || '0';
+            const testTotal    = '${{ needs.test.outputs.total }}'  || '0';
+            const testPassed   = '${{ needs.test.outputs.passed }}' || '0';
+            const testFailed   = '${{ needs.test.outputs.failed }}' || '0';
+            const sastFindings = '${{ needs.security.outputs.sast_findings }}' || '0';
+            const depFindings  = '${{ needs.security.outputs.dep_findings }}'  || '0';
+            const vulnCritical = '${{ needs.security.outputs.critical }}' || '0';
+            const vulnHigh     = '${{ needs.security.outputs.high }}'     || '0';
+            const vulnMedium   = '${{ needs.security.outputs.medium }}'   || '0';
+            const vulnLow      = '${{ needs.security.outputs.low }}'      || '0';
+
+            const overall = [lintResult, testResult, secResult].some(s => s === 'failure')
+              ? '❌ Failed' : '✅ Passed';
+
+            const body = [
+              '## 📋 CI Summary',
+              '',
+              '| Check | Status | Details |',
+              '|-------|--------|---------|',
+              '| **Lint** | ' + icon(lintResult) + ' | ' + lintErrors + ' error(s) |',
+              '| **Tests** | ' + icon(testResult) + ' | ' + testTotal + ' total, ' + testPassed + ' passed, ' + testFailed + ' failed |',
+              '| **SAST** | ' + icon(secResult) + ' | ' + sastFindings + ' finding(s) |',
+              '| **Dependencies** | ' + icon(secResult) + ' | ' + depFindings + ' issue(s) |',
+              '| **Vulnerabilities** | ' + icon(secResult) + ' | ' + vulnCritical + ' critical, ' + vulnHigh + ' high, ' + vulnMedium + ' medium, ' + vulnLow + ' low |',
+              '',
+              '**Overall: ' + overall + '**',
+              '',
+              '[View Full Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+            ].join('\n');
+
+            const prNumber = context.payload.pull_request?.number;
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
+
       - name: Check overall status
         run: |
-          echo "Lint: ${{ needs.lint.result }}"
-          echo "Test: ${{ needs.test.result }}"
+          echo "Lint:     ${{ needs.lint.result }}"
+          echo "Test:     ${{ needs.test.result }}"
           echo "Security: ${{ needs.security.result }}"
 
           if [[ "${{ needs.lint.result }}" == "failure" || \
                 "${{ needs.test.result }}" == "failure" || \
                 "${{ needs.security.result }}" == "failure" ]]; then
-            echo "❌ CI failed"
+            echo "CI failed"
             exit 1
           fi
-          echo "✅ All CI checks passed"
+          echo "All CI checks passed"
 
       - name: Notify Slack on overall success
         if: success() && env.SLACK_WEBHOOK_URL != '' && github.ref == 'refs/heads/main'
