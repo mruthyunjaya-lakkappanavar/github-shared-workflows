@@ -2,7 +2,7 @@
   "owner": "mruthyunjaya-lakkappanavar",
   "title": "CI/CD Dashboard",
   "subtitle": "Cross-repo workflow visibility for GitHub Shared Workflows",
-  "version": "v3.0",
+  "version": "v4.0",
   "repos": [
     {
       "name": "sample-app-python",

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Repo Detail — CI/CD Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>" />
+  <style>
+    .detail-header { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-xl); }
+    .detail-header .repo-icon { font-size: 2.5rem; }
+    .detail-header h1 { font-size: var(--font-size-2xl); color: var(--accent-bright); }
+    .detail-header .lang-badge { font-size: var(--font-size-sm); }
+    .back-link { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--text-secondary); margin-bottom: var(--space-lg); font-size: var(--font-size-sm); }
+    .back-link:hover { color: var(--accent); text-decoration: none; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg); margin-bottom: var(--space-xl); }
+    .stat-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--space-lg); }
+    .stat-card h3 { font-size: var(--font-size-lg); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm); }
+    .stat-card .stat-icon { font-size: 1.3rem; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: var(--space-xs) 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--text-secondary); font-size: var(--font-size-sm); }
+    .stat-value { font-family: var(--font-mono); font-weight: 600; font-size: var(--font-size-base); }
+    .stat-value.ok { color: var(--success); }
+    .stat-value.fail { color: var(--failure); }
+    .stat-value.warn { color: var(--accent); }
+    .stat-value.neutral { color: var(--text-primary); }
+
+    .severity-bar { display: flex; gap: 2px; margin-top: var(--space-sm); height: 8px; border-radius: 4px; overflow: hidden; }
+    .severity-bar span { flex: 1; min-width: 4px; border-radius: 2px; }
+    .severity-bar .critical { background: #d32f2f; }
+    .severity-bar .high { background: #f85149; }
+    .severity-bar .medium { background: var(--accent); }
+    .severity-bar .low { background: #58a6ff; }
+    .severity-bar .none { background: var(--success); }
+
+    .run-history-table { width: 100%; border-collapse: collapse; margin-top: var(--space-md); }
+    .run-history-table th { text-align: left; padding: var(--space-sm); color: var(--text-muted); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-default); }
+    .run-history-table td { padding: var(--space-sm); font-size: var(--font-size-sm); border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .run-history-table .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+    .detail-section { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--space-lg); margin-bottom: var(--space-xl); }
+    .detail-section h2 { font-size: var(--font-size-lg); margin-bottom: var(--space-md); color: var(--accent); }
+
+    .loading-detail { text-align: center; padding: var(--space-2xl); color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="logo">⚡</div>
+        <div>
+          <h1 id="dashboard-title">Repo Detail</h1>
+          <p class="subtitle" id="dashboard-subtitle">CI/CD Pipeline Stats</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-refresh" id="refresh-btn" title="Refresh now">
+          <span class="refresh-icon">↻</span> Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <a class="back-link" href="index.html">← Back to Dashboard</a>
+    <div id="detail-content">
+      <div class="loading-detail">Loading repo details…</div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>Powered by <a href="https://github.com/mruthyunjaya-lakkappanavar/github-shared-workflows" target="_blank">github-shared-workflows</a></span>
+      <span class="separator">·</span>
+      <span id="footer-version">v4.0</span>
+    </div>
+  </footer>
+
+  <script src="repo-detail.js"></script>
+</body>
+</html>
