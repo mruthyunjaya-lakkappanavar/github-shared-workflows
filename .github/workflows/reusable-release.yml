@@ -23,7 +23,7 @@ on:
         type: boolean
         default: true
     secrets:
-      SLACK_WEBHOOK_URL:
+      SLACK_RELEASE_WEBHOOK_URL:
         required: false
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      SLACK_RELEASE_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
 
     steps:
       # ── 1. Checkout (full history for changelog) ──
@@ -54,11 +54,11 @@ jobs:
 
       # ── 3. Slack notification on new release ──
       - name: Notify Slack on release
-        if: steps.release.outputs.release_created && inputs.enable_slack_notify && env.SLACK_WEBHOOK_URL != ''
+        if: steps.release.outputs.release_created && inputs.enable_slack_notify && env.SLACK_RELEASE_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
         with:
           status: release
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook_url: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
           repo_name: ${{ github.repository }}
           run_url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag_name }}
           message: "Version ${{ steps.release.outputs.tag_name }} released 🎉"

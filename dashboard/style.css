@@ -744,3 +744,92 @@ footer {
 .text-accent  { color: var(--accent); }
 .text-muted   { color: var(--text-muted); }
 .mono         { font-family: var(--font-mono); }
+
+/* ─── Category Grid (inside Repo Card) ─── */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-sm);
+}
+
+@media (max-width: 600px) {
+  .category-grid { grid-template-columns: 1fr; }
+}
+
+.category-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.category-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--cancelled);
+}
+
+.category-panel.cat-success::before { background: var(--success); }
+.category-panel.cat-failure::before { background: var(--failure); }
+.category-panel.cat-in_progress::before { background: var(--in-progress); }
+
+.category-panel:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-sm);
+}
+
+.category-icon {
+  font-size: 1rem;
+}
+
+.category-label {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.category-latest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-xs);
+}
+
+.category-history {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  min-height: 12px;
+}
+
+.history-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  cursor: default;
+  transition: transform var(--transition-fast);
+}
+
+.history-dot:hover { transform: scale(1.4); }
+
+.history-dot.success   { background: var(--success); }
+.history-dot.failure   { background: var(--failure); }
+.history-dot.cancelled { background: var(--cancelled); }
+.history-dot.in_progress { background: var(--in-progress); }
+.history-dot.unknown   { background: var(--skipped); }
