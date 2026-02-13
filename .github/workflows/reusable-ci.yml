@@ -1,0 +1,153 @@
+name: Reusable CI
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "Programming language: python, node, or go"
+        required: true
+        type: string
+      language_version:
+        description: "Language version (e.g., 3.11, 20, 1.22)"
+        required: true
+        type: string
+      working_directory:
+        description: "Path to source code"
+        required: false
+        type: string
+        default: "."
+      enable_lint:
+        description: "Run linting step"
+        required: false
+        type: boolean
+        default: true
+      enable_security_scan:
+        description: "Run Trivy vulnerability scan"
+        required: false
+        type: boolean
+        default: true
+      enable_test:
+        description: "Run test suite"
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+jobs:
+  ci:
+    name: CI Pipeline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      # ── 1. Checkout ──
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Toolchain ──
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      # ── 3. Install Dependencies (Python) ──
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      # ── 3. Install Dependencies (Node) ──
+      - name: Install Node dependencies
+        if: inputs.language == 'node'
+        run: npm ci
+
+      # ── 3. Install Dependencies (Go) ──
+      - name: Install Go dependencies
+        if: inputs.language == 'go'
+        run: go mod download
+
+      # ── 4. Lint (Python) ──
+      - name: Lint with flake8
+        if: inputs.enable_lint && inputs.language == 'python'
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      # ── 4. Lint (Node) ──
+      - name: Lint with ESLint
+        if: inputs.enable_lint && inputs.language == 'node'
+        run: npx eslint . --max-warnings=0 || true
+
+      # ── 4. Lint (Go) ──
+      - name: Lint with golangci-lint
+        if: inputs.enable_lint && inputs.language == 'go'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      # ── 5. Test (Python) ──
+      - name: Run pytest
+        if: inputs.enable_test && inputs.language == 'python'
+        run: |
+          pytest --junitxml=test-results.xml --tb=short -v
+
+      # ── 5. Test (Node) ──
+      - name: Run Jest
+        if: inputs.enable_test && inputs.language == 'node'
+        run: npx jest --ci --reporters=default --reporters=jest-junit || npm test
+
+      # ── 5. Test (Go) ──
+      - name: Run Go tests
+        if: inputs.enable_test && inputs.language == 'go'
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out
+
+      # ── 6. Upload test results ──
+      - name: Upload test results
+        if: always() && inputs.enable_test
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ inputs.language }}
+          path: |
+            **/test-results.xml
+            **/junit.xml
+          retention-days: 30
+
+      # ── 7. Security scan with Trivy ──
+      - name: Run Trivy vulnerability scan
+        if: inputs.enable_security_scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: "fs"
+          scan-ref: ${{ inputs.working_directory }}
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      # ── 8. Slack notification on failure ──
+      - name: Notify Slack on failure
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        with:
+          status: failure
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # ── 9. Slack notification on success (main branch only) ──
+      - name: Notify Slack on success
+        if: success() && secrets.SLACK_WEBHOOK_URL != '' && github.ref == 'refs/heads/main'
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        with:
+          status: success
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

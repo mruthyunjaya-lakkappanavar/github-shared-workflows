@@ -1,0 +1,78 @@
+name: "Slack Notify"
+description: "Send color-coded Slack notifications for CI/CD events"
+
+inputs:
+  status:
+    description: "Notification status: success, failure, or release"
+    required: true
+  webhook_url:
+    description: "Slack incoming webhook URL"
+    required: true
+  repo_name:
+    description: "Repository name"
+    required: true
+  run_url:
+    description: "Link to the GitHub Actions workflow run"
+    required: true
+  message:
+    description: "Optional custom message (e.g., release notes)"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set color and icon
+      id: meta
+      shell: bash
+      run: |
+        STATUS="${{ inputs.status }}"
+        if [ "$STATUS" = "success" ]; then
+          echo "color=#2eb886" >> "$GITHUB_OUTPUT"
+          echo "icon=:white_check_mark:" >> "$GITHUB_OUTPUT"
+          echo "title=CI Passed" >> "$GITHUB_OUTPUT"
+        elif [ "$STATUS" = "failure" ]; then
+          echo "color=#ff0000" >> "$GITHUB_OUTPUT"
+          echo "icon=:red_circle:" >> "$GITHUB_OUTPUT"
+          echo "title=CI Failed" >> "$GITHUB_OUTPUT"
+        elif [ "$STATUS" = "release" ]; then
+          echo "color=#0076D7" >> "$GITHUB_OUTPUT"
+          echo "icon=:rocket:" >> "$GITHUB_OUTPUT"
+          echo "title=New Release" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Send Slack notification
+      uses: slackapi/slack-github-action@v2.1.0
+      with:
+        webhook: ${{ inputs.webhook_url }}
+        webhook-type: incoming-webhook
+        payload: |
+          {
+            "attachments": [
+              {
+                "color": "${{ steps.meta.outputs.color }}",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "${{ steps.meta.outputs.icon }} *${{ steps.meta.outputs.title }}*\n*Repo:* ${{ inputs.repo_name }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}${{ inputs.message != '' && format('\n*Details:* {0}', inputs.message) || '' }}"
+                    }
+                  },
+                  {
+                    "type": "actions",
+                    "elements": [
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "View Run"
+                        },
+                        "url": "${{ inputs.run_url }}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }

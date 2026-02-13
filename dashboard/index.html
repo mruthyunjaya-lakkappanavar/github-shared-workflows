@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Actions Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <h1>🚀 GitHub Actions Dashboard</h1>
+      <p class="subtitle">Cross-repo CI/CD visibility for shared workflows</p>
+      <div class="header-meta">
+        <span id="last-updated">Last updated: —</span>
+        <button id="refresh-btn" title="Refresh now">↻ Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Health Summary -->
+    <section id="health-summary" class="section">
+      <h2>📊 Health Summary</h2>
+      <div class="summary-cards" id="summary-cards">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Workflow Status Grid -->
+    <section id="status-grid" class="section">
+      <h2>🔄 Workflow Status</h2>
+      <div id="repo-grids">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Recent Activity Feed -->
+    <section id="activity-feed" class="section">
+      <h2>📋 Recent Activity</h2>
+      <div id="activity-list">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Repository Cards -->
+    <section id="repo-cards" class="section">
+      <h2>📦 Repositories</h2>
+      <div class="repo-card-grid" id="repo-card-grid">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Powered by <a href="https://github.com/mruthyunjaya-lakkappanavar/github-shared-workflows" target="_blank">github-shared-workflows</a> | Data from GitHub REST API</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

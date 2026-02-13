@@ -1,0 +1,64 @@
+name: "Setup Toolchain"
+description: "Setup Python, Node.js, or Go with dependency caching"
+
+inputs:
+  language:
+    description: "Programming language: python, node, or go"
+    required: true
+  language_version:
+    description: "Language version (e.g., 3.11, 20, 1.22)"
+    required: true
+  cache:
+    description: "Enable dependency caching"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    # ── Python Setup ──
+    - name: Setup Python
+      if: inputs.language == 'python'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.language_version }}
+        cache: ${{ inputs.cache == 'true' && 'pip' || '' }}
+
+    - name: Verify Python installation
+      if: inputs.language == 'python'
+      shell: bash
+      run: |
+        echo "🐍 Python version:"
+        python --version
+        pip --version
+
+    # ── Node.js Setup ──
+    - name: Setup Node.js
+      if: inputs.language == 'node'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.language_version }}
+        cache: ${{ inputs.cache == 'true' && 'npm' || '' }}
+
+    - name: Verify Node.js installation
+      if: inputs.language == 'node'
+      shell: bash
+      run: |
+        echo "📦 Node.js version:"
+        node --version
+        npm --version
+
+    # ── Go Setup ──
+    - name: Setup Go
+      if: inputs.language == 'go'
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.language_version }}
+        cache: ${{ inputs.cache == 'true' }}
+
+    - name: Verify Go installation
+      if: inputs.language == 'go'
+      shell: bash
+      run: |
+        echo "🐹 Go version:"
+        go version

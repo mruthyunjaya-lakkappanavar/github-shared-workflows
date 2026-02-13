@@ -1,0 +1,62 @@
+name: Reusable Release
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "Programming language: python or node"
+        required: true
+        type: string
+      release_type:
+        description: "Release type: auto (conventional commits), patch, minor, major"
+        required: false
+        type: string
+        default: "auto"
+      enable_changelog:
+        description: "Auto-generate CHANGELOG.md"
+        required: false
+        type: boolean
+        default: true
+      enable_slack_notify:
+        description: "Send release notification to Slack"
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout (full history for changelog) ──
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Release Please ──
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          release-type: simple
+          include-component-in-tag: false
+
+      # ── 3. Slack notification on new release ──
+      - name: Notify Slack on release
+        if: steps.release.outputs.release_created && inputs.enable_slack_notify && secrets.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        with:
+          status: release
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag_name }}
+          message: "Version ${{ steps.release.outputs.tag_name }} released 🎉"
