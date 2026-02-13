@@ -53,7 +53,7 @@ jobs:
             echo "📦 Updating single repo: $SPECIFIC"
           else
             # Read repo names from manifest.json
-            REPOS=$(jq -r '.repos[].name' dashboard/manifest.json | tr '\n' ' ')
+            REPOS=$(jq -r '.repos[].name' manifest.json | tr '\n' ' ')
             echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
             echo "mode=all" >> "$GITHUB_OUTPUT"
             echo "📦 Updating all repos: $REPOS"
@@ -65,7 +65,7 @@ jobs:
         run: |
           OWNER="mruthyunjaya-lakkappanavar"
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          DATA_DIR="dashboard/data"
+          DATA_DIR="data"
 
           mkdir -p "$DATA_DIR"
 
@@ -111,7 +111,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/data/
+          git add data/
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
