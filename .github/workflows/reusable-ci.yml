@@ -136,6 +136,7 @@ jobs:
             echo "status=failure" >> "$GITHUB_OUTPUT"
           fi
           echo "error_count=${{ steps.lint.outputs.error_count }}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=ci_lint::errors=${{ steps.lint.outputs.error_count }}"
 
       - name: Comment on PR if lint failed
         if: |
@@ -322,6 +323,7 @@ jobs:
           echo "passed=${{ steps.tests.outputs.passed }}" >> "$GITHUB_OUTPUT"
           echo "failed=${{ steps.tests.outputs.failed }}" >> "$GITHUB_OUTPUT"
           echo "coverage=${{ steps.tests.outputs.coverage }}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=ci_test::total=${{ steps.tests.outputs.total }}|passed=${{ steps.tests.outputs.passed }}|failed=${{ steps.tests.outputs.failed }}|coverage=${{ steps.tests.outputs.coverage }}"
 
       - name: Upload test results
         if: always()
@@ -541,6 +543,8 @@ jobs:
           echo "Trivy Medium:      $MEDIUM"
           echo "Trivy Low:         $LOW"
           echo "Total findings:    $TOTAL_FINDINGS"
+
+          echo "::notice title=ci_security::sast=$SAST|deps=$DEPS|critical=$CRITICAL|high=$HIGH|medium=$MEDIUM|low=$LOW"
 
           if [ "$TOTAL_FINDINGS" -gt 0 ]; then
             echo "status=failure" >> "$GITHUB_OUTPUT"

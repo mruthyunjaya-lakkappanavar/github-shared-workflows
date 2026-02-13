@@ -113,6 +113,7 @@ async function fetchRepoData(repo) {
 
   let runs = [];
   let allJobs = [];
+  let ciStats = { lint: {}, test: {}, security: {} };
 
   // 1. Fetch workflow runs
   try {
@@ -137,16 +138,45 @@ async function fetchRepoData(repo) {
         const jobs = jobsData.jobs.map(j => normalizeJob(j, run));
         allJobs.push(...jobs);
       }
-    } catch (_) {
-      // If jobs API fails, we'll still show run-level data
-    }
+    } catch (_) {}
   }
 
-  // 3. Categorise
+  // 3. Fetch annotations for latest CI run jobs to get stats
+  if (ciRuns.length > 0) {
+    const latestCIRun = ciRuns[0];
+    try {
+      const jobsUrl = `${GITHUB_API}/repos/${owner}/${name}/actions/runs/${latestCIRun.id}/jobs`;
+      const jobsData = await fetchJSON(jobsUrl);
+      for (const job of (jobsData?.jobs || [])) {
+        try {
+          const annUrl = `${GITHUB_API}/repos/${owner}/${name}/check-runs/${job.id}/annotations`;
+          const annotations = await fetchJSON(annUrl);
+          for (const ann of annotations) {
+            const title = ann.title || '';
+            const msg = ann.message || '';
+            if (title === 'ci_lint') ciStats.lint = parseAnnotationKV(msg);
+            else if (title === 'ci_test') ciStats.test = parseAnnotationKV(msg);
+            else if (title === 'ci_security') ciStats.security = parseAnnotationKV(msg);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  // 4. Categorise
   const categories = categoriseData(runs, allJobs);
   const latestConclusion = runs.length > 0 ? runs[0].conclusion : 'unknown';
 
-  return { runs, jobs: allJobs, categories, conclusion: latestConclusion, totalCount: runs.length };
+  return { runs, jobs: allJobs, categories, conclusion: latestConclusion, totalCount: runs.length, ciStats };
+}
+
+function parseAnnotationKV(str) {
+  const obj = {};
+  (str || '').split('|').forEach(part => {
+    const [k, v] = part.split('=');
+    if (k && v !== undefined) obj[k.trim()] = v.trim();
+  });
+  return obj;
 }
 
 function normalizeRun(run) {
@@ -346,8 +376,9 @@ function renderRepoCards() {
   const container = document.getElementById('repo-cards');
 
   container.innerHTML = repos.map(repo => {
-    const data = repoData[repo.name] || { runs: [], categories: emptyCategories(), conclusion: 'unknown' };
+    const data = repoData[repo.name] || { runs: [], categories: emptyCategories(), conclusion: 'unknown', ciStats: {} };
     const cats = data.categories || emptyCategories();
+    const stats = data.ciStats || { lint: {}, test: {}, security: {} };
     const overallConclusion = data.conclusion || 'unknown';
     const langClass = (repo.language || '').toLowerCase();
 
@@ -365,15 +396,156 @@ function renderRepoCards() {
           <span class="repo-status-badge ${overallConclusion}">${conclusionLabel(overallConclusion)}</span>
         </div>
 
-        <!-- Category Panels -->
+        <!-- Category Panels with Stats -->
         <div class="repo-card-body">
           <div class="category-grid">
-            ${CATEGORIES.map(catDef => renderCategoryPanel(catDef, cats[catDef.key])).join('')}
+            ${renderLintPanel(cats.lint, stats.lint)}
+            ${renderTestPanel(cats.test, stats.test)}
+            ${renderSecurityPanel(cats.security, stats.security)}
+            ${renderCategoryPanel(CATEGORIES[3], cats.release)}
           </div>
+        </div>
+
+        <div class="repo-card-footer">
+          <a class="detail-link" href="repo.html?repo=${repo.name}">View detailed stats →</a>
         </div>
       </div>
     `;
   }).join('');
+}
+
+function renderLintPanel(catData, stats) {
+  const conclusion = catData?.conclusion || 'unknown';
+  const latest = catData?.latest;
+  const items = (catData?.items || []).slice(0, 5);
+  const errors = stats?.errors;
+
+  const statusDot = `<span class="run-status-dot ${conclusion}"></span>`;
+  const latestInfo = latest
+    ? `<a class="run-link" href="${latest.html_url}" target="_blank">#${latest.run_number}</a>
+       <span class="text-muted">${latest.duration}</span>`
+    : '<span class="text-muted">no runs</span>';
+  const historyDots = items.map(item =>
+    `<span class="history-dot ${item.conclusion}" title="#${item.run_number} — ${item.conclusion}"></span>`
+  ).join('');
+
+  // Stats line
+  let statsLine = '';
+  if (conclusion === 'success') {
+    statsLine = '<span class="stat-inline ok">✅ All OK</span>';
+  } else if (conclusion === 'failure' && errors !== undefined) {
+    statsLine = `<span class="stat-inline fail">❌ ${errors} error(s)</span>`;
+  } else if (conclusion === 'failure') {
+    statsLine = '<span class="stat-inline fail">❌ Failed</span>';
+  }
+
+  return `
+    <div class="category-panel cat-${conclusion}">
+      <div class="category-header">
+        <span class="category-icon">🔍</span>
+        <span class="category-label">Lint</span>
+        ${statusDot}
+      </div>
+      ${statsLine ? `<div class="category-stats">${statsLine}</div>` : ''}
+      <div class="category-latest">${latestInfo}</div>
+      <div class="category-history">${historyDots || '<span class="text-muted">—</span>'}</div>
+    </div>
+  `;
+}
+
+function renderTestPanel(catData, stats) {
+  const conclusion = catData?.conclusion || 'unknown';
+  const latest = catData?.latest;
+  const items = (catData?.items || []).slice(0, 5);
+
+  const statusDot = `<span class="run-status-dot ${conclusion}"></span>`;
+  const latestInfo = latest
+    ? `<a class="run-link" href="${latest.html_url}" target="_blank">#${latest.run_number}</a>
+       <span class="text-muted">${latest.duration}</span>`
+    : '<span class="text-muted">no runs</span>';
+  const historyDots = items.map(item =>
+    `<span class="history-dot ${item.conclusion}" title="#${item.run_number} — ${item.conclusion}"></span>`
+  ).join('');
+
+  let statsLine = '';
+  const total = stats?.total, passed = stats?.passed, failed = stats?.failed, cov = stats?.coverage;
+  if (total !== undefined) {
+    const failClass = parseInt(failed) > 0 ? 'fail' : 'ok';
+    statsLine = `<span class="stat-inline neutral">${total} total</span>
+      <span class="stat-inline ok">${passed} pass</span>
+      <span class="stat-inline ${failClass}">${failed} fail</span>`;
+    if (cov && cov !== 'N/A') {
+      const covNum = parseFloat(cov);
+      const covClass = covNum >= 80 ? 'ok' : covNum >= 50 ? 'warn' : 'fail';
+      statsLine += ` <span class="stat-inline ${covClass}">📊 ${cov}</span>`;
+    }
+  } else if (conclusion === 'success') {
+    statsLine = '<span class="stat-inline ok">✅ Passed</span>';
+  } else if (conclusion === 'failure') {
+    statsLine = '<span class="stat-inline fail">❌ Failed</span>';
+  }
+
+  return `
+    <div class="category-panel cat-${conclusion}">
+      <div class="category-header">
+        <span class="category-icon">🧪</span>
+        <span class="category-label">Unit Tests</span>
+        ${statusDot}
+      </div>
+      ${statsLine ? `<div class="category-stats">${statsLine}</div>` : ''}
+      <div class="category-latest">${latestInfo}</div>
+      <div class="category-history">${historyDots || '<span class="text-muted">—</span>'}</div>
+    </div>
+  `;
+}
+
+function renderSecurityPanel(catData, stats) {
+  const conclusion = catData?.conclusion || 'unknown';
+  const latest = catData?.latest;
+  const items = (catData?.items || []).slice(0, 5);
+
+  const statusDot = `<span class="run-status-dot ${conclusion}"></span>`;
+  const latestInfo = latest
+    ? `<a class="run-link" href="${latest.html_url}" target="_blank">#${latest.run_number}</a>
+       <span class="text-muted">${latest.duration}</span>`
+    : '<span class="text-muted">no runs</span>';
+  const historyDots = items.map(item =>
+    `<span class="history-dot ${item.conclusion}" title="#${item.run_number} — ${item.conclusion}"></span>`
+  ).join('');
+
+  let statsLine = '';
+  const sast = stats?.sast, deps = stats?.deps, crit = stats?.critical, high = stats?.high, med = stats?.medium, low = stats?.low;
+  if (sast !== undefined || crit !== undefined) {
+    const parts = [];
+    if (parseInt(sast) > 0) parts.push(`<span class="stat-inline fail">${sast} SAST</span>`);
+    if (parseInt(deps) > 0) parts.push(`<span class="stat-inline warn">${deps} deps</span>`);
+    if (parseInt(crit) > 0) parts.push(`<span class="stat-inline fail">${crit} crit</span>`);
+    if (parseInt(high) > 0) parts.push(`<span class="stat-inline fail">${high} high</span>`);
+    if (parseInt(med) > 0) parts.push(`<span class="stat-inline warn">${med} med</span>`);
+    if (parseInt(low) > 0) parts.push(`<span class="stat-inline neutral">${low} low</span>`);
+    if (parts.length === 0) {
+      statsLine = '<span class="stat-inline ok">✅ Clean</span>';
+    } else {
+      statsLine = parts.join(' ');
+    }
+  } else if (conclusion === 'success') {
+    statsLine = '<span class="stat-inline ok">✅ Clean</span>';
+  } else if (conclusion === 'failure') {
+    statsLine = '<span class="stat-inline fail">❌ Issues Found</span>';
+  }
+
+  return `
+    <div class="category-panel cat-${conclusion}">
+      <div class="category-header">
+        <span class="category-icon">🛡️</span>
+        <span class="category-label">Security</span>
+        ${statusDot}
+      </div>
+      ${statsLine ? `<div class="category-stats">${statsLine}</div>` : ''}
+      <div class="category-latest">${latestInfo}</div>
+      <div class="category-history">${historyDots || '<span class="text-muted">—</span>'}</div>
+    </div>
+  `;
 }
 
 function renderCategoryPanel(catDef, catData) {
