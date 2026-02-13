@@ -29,10 +29,16 @@ async function loadDetail() {
 
     const owner = manifest.owner;
 
-    // Fetch latest CI workflow runs (not release)
-    const runsUrl = `${GITHUB_API}/repos/${owner}/${repoName}/actions/runs?per_page=10`;
+    // Fetch latest CI workflow runs (only actual CI, not release/copilot/dynamic)
+    const runsUrl = `${GITHUB_API}/repos/${owner}/${repoName}/actions/runs?per_page=20`;
     const runsData = await fetchJSON(runsUrl);
-    const ciRuns = (runsData.workflow_runs || []).filter(r => !r.name.toLowerCase().includes('release'));
+    const ciRuns = (runsData.workflow_runs || []).filter(r => {
+      const name = (r.name || '').toLowerCase();
+      if (name.includes('release')) return false;
+      if (name.includes('copilot')) return false;
+      if (r.event === 'dynamic') return false;
+      return true;
+    });
     const latestRun = ciRuns[0];
 
     if (!latestRun) {
@@ -127,7 +133,7 @@ function renderDetail(repo, latestRun, jobs, stats, recentRuns) {
         <h3><span class="stat-icon">🔍</span> Lint</h3>
         <div class="stat-row">
           <span class="stat-label">Status</span>
-          <span class="stat-value ${lintConclusion === 'success' ? 'ok' : 'fail'}">${lintConclusion === 'success' ? '✅ All OK' : '❌ Failed'}</span>
+          <span class="stat-value ${lintConclusion === 'success' ? 'ok' : lintConclusion === 'failure' ? 'fail' : 'neutral'}">${lintConclusion === 'success' ? '✅ All OK' : lintConclusion === 'failure' ? '❌ Failed' : '⏳ N/A'}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Error Count</span>
@@ -141,7 +147,7 @@ function renderDetail(repo, latestRun, jobs, stats, recentRuns) {
         <h3><span class="stat-icon">🧪</span> Unit Tests</h3>
         <div class="stat-row">
           <span class="stat-label">Status</span>
-          <span class="stat-value ${testConclusion === 'success' ? 'ok' : 'fail'}">${testConclusion === 'success' ? '✅ Passed' : '❌ Failed'}</span>
+          <span class="stat-value ${testConclusion === 'success' ? 'ok' : testConclusion === 'failure' ? 'fail' : 'neutral'}">${testConclusion === 'success' ? '✅ Passed' : testConclusion === 'failure' ? '❌ Failed' : '⏳ N/A'}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Total</span>
@@ -167,7 +173,7 @@ function renderDetail(repo, latestRun, jobs, stats, recentRuns) {
         <h3><span class="stat-icon">🛡️</span> Security</h3>
         <div class="stat-row">
           <span class="stat-label">Status</span>
-          <span class="stat-value ${secConclusion === 'success' ? 'ok' : 'fail'}">${secConclusion === 'success' ? '✅ Clean' : '❌ Issues Found'}</span>
+          <span class="stat-value ${secConclusion === 'success' ? 'ok' : secConclusion === 'failure' ? 'fail' : 'neutral'}">${secConclusion === 'success' ? '✅ Clean' : secConclusion === 'failure' ? '❌ Issues Found' : '⏳ N/A'}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">SAST Findings</span>

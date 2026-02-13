@@ -115,11 +115,20 @@ async function fetchRepoData(repo) {
   let allJobs = [];
   let ciStats = { lint: {}, test: {}, security: {} };
 
-  // 1. Fetch workflow runs
+  // 1. Fetch workflow runs (filter out non-CI runs like Copilot code review)
   try {
     const url  = `${GITHUB_API}/repos/${owner}/${name}/actions/runs?per_page=${maxRuns}`;
     const data = await fetchJSON(url);
-    if (data?.workflow_runs) runs = data.workflow_runs.map(normalizeRun);
+    if (data?.workflow_runs) {
+      runs = data.workflow_runs
+        .filter(r => {
+          const rname = (r.name || '').toLowerCase();
+          if (rname.includes('copilot')) return false;
+          if (r.event === 'dynamic') return false;
+          return true;
+        })
+        .map(normalizeRun);
+    }
   } catch (apiErr) {
     console.warn(`API fetch failed for ${name}, trying static...`, apiErr.message);
     try {
