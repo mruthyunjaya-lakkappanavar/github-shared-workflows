@@ -1,27 +1,33 @@
 /* ═══════════════════════════════════════════════════════════
-   CI/CD Dashboard — Client-Side Engine  (v2.0)
+   CI/CD Dashboard — Client-Side Engine  (v3.0)
    ══════════════════════════════════════════════════════════
    Architecture:
      1. Reads manifest.json for repo list & config
-     2. Fetches live workflow run data from GitHub REST API
-     3. Falls back to static data/{repo}.json files if API fails
-     4. Renders summary, repo cards, timeline, and insights
+     2. Fetches live workflow run + job data from GitHub REST API
+     3. Categorises jobs into: Lint, Test, Security, Release
+     4. Renders per-repo cards with categorised status panels
      5. Auto-refreshes on configurable interval
    ═══════════════════════════════════════════════════════════ */
 
 'use strict';
 
-// ─── Constants ───
 const GITHUB_API = 'https://api.github.com';
-const CACHE_KEY  = 'dashboard_cache';
-const CACHE_TTL  = 5 * 60 * 1000; // 5 minutes
+const CACHE_KEY  = 'dashboard_cache_v3';
+const CACHE_TTL  = 5 * 60 * 1000;
 
-// ─── State ───
-let manifest  = null;
-let allRuns   = [];
-let repoData  = {};  // { repoKey: { runs, conclusion, workflows } }
+// Category definitions — used for classification and display
+const CATEGORIES = [
+  { key: 'lint',     label: 'Lint',          icon: '🔍', patterns: [/lint/i] },
+  { key: 'test',     label: 'Unit Tests',    icon: '🧪', patterns: [/test/i] },
+  { key: 'security', label: 'Security',      icon: '🛡️', patterns: [/security/i, /scan/i, /sast/i, /trivy/i, /vuln/i] },
+  { key: 'release',  label: 'Release',       icon: '🚀', patterns: [/release/i] },
+];
+
+let manifest     = null;
+let allRuns      = [];
+let repoData     = {};
 let refreshTimer = null;
-let isLoading = false;
+let isLoading    = false;
 
 // ─── Bootstrap ───
 document.addEventListener('DOMContentLoaded', async () => {
@@ -40,11 +46,8 @@ async function init() {
   }
 }
 
-// ─── Event Bindings ───
 function bindEvents() {
   document.getElementById('refresh-btn').addEventListener('click', () => refresh());
-
-  // Filter buttons
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -54,7 +57,6 @@ function bindEvents() {
   });
 }
 
-// ─── Manifest Config ───
 function applyManifestConfig() {
   if (!manifest) return;
   if (manifest.title) document.getElementById('dashboard-title').textContent = manifest.title;
@@ -62,7 +64,9 @@ function applyManifestConfig() {
   if (manifest.version) document.getElementById('footer-version').textContent = manifest.version;
 }
 
-// ─── Data Fetching ───
+// ═══════════════════════════════════════════════════
+//  DATA FETCHING
+// ═══════════════════════════════════════════════════
 async function refresh() {
   if (isLoading) return;
   isLoading = true;
@@ -70,51 +74,32 @@ async function refresh() {
 
   try {
     const repos = manifest.repos || [];
-    const results = await Promise.allSettled(
-      repos.map(repo => fetchRepoData(repo))
-    );
+    const results = await Promise.allSettled(repos.map(r => fetchRepoData(r)));
 
-    allRuns = [];
+    allRuns  = [];
     repoData = {};
 
     results.forEach((result, idx) => {
       const repo = repos[idx];
-      const key = repo.name;
       if (result.status === 'fulfilled' && result.value) {
-        repoData[key] = result.value;
+        repoData[repo.name] = result.value;
         allRuns.push(...(result.value.runs || []).map(r => ({ ...r, _repo: repo })));
       } else {
-        repoData[key] = { runs: [], conclusion: 'unknown', error: true };
+        repoData[repo.name] = { runs: [], jobs: [], categories: emptyCategories(), conclusion: 'unknown', error: true };
       }
     });
 
-    // Sort all runs by date descending
     allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Cache the data
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        ts: Date.now(),
-        repoData,
-        allRuns
-      }));
-    } catch (_) { /* ignore quota errors */ }
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), repoData, allRuns })); } catch (_) {}
 
     render();
     updateDataSourceBadge('live');
     updateLastRefreshed();
   } catch (err) {
-    // Try cache fallback
     const cached = loadCache();
-    if (cached) {
-      repoData = cached.repoData;
-      allRuns = cached.allRuns;
-      render();
-      updateDataSourceBadge('cached');
-    } else {
-      showGlobalError('Failed to fetch data: ' + err.message);
-      updateDataSourceBadge('error');
-    }
+    if (cached) { repoData = cached.repoData; allRuns = cached.allRuns; render(); updateDataSourceBadge('cached'); }
+    else { showGlobalError('Failed to fetch data: ' + err.message); updateDataSourceBadge('error'); }
   } finally {
     isLoading = false;
     setRefreshing(false);
@@ -123,66 +108,185 @@ async function refresh() {
 
 async function fetchRepoData(repo) {
   const owner = manifest.owner;
-  const name = repo.name;
+  const name  = repo.name;
   const maxRuns = manifest.maxRunsPerRepo || 20;
 
-  // Try GitHub API first
+  let runs = [];
+  let allJobs = [];
+
+  // 1. Fetch workflow runs
   try {
-    const url = `${GITHUB_API}/repos/${owner}/${name}/actions/runs?per_page=${maxRuns}&status=completed`;
+    const url  = `${GITHUB_API}/repos/${owner}/${name}/actions/runs?per_page=${maxRuns}`;
     const data = await fetchJSON(url);
-
-    if (data && data.workflow_runs) {
-      const runs = data.workflow_runs.map(normalizeRun);
-      const latestConclusion = runs.length > 0 ? runs[0].conclusion : 'unknown';
-
-      return {
-        runs,
-        conclusion: latestConclusion,
-        totalCount: data.total_count || runs.length
-      };
-    }
+    if (data?.workflow_runs) runs = data.workflow_runs.map(normalizeRun);
   } catch (apiErr) {
-    console.warn(`API fetch failed for ${name}, trying static data...`, apiErr.message);
+    console.warn(`API fetch failed for ${name}, trying static...`, apiErr.message);
+    try {
+      const d = await fetchJSON(`${manifest.dataPath || 'data'}/${name}.json`);
+      if (d?.runs) runs = d.runs.map(normalizeRun);
+    } catch (_) {}
   }
 
-  // Fallback to static data file
-  try {
-    const dataPath = manifest.dataPath || 'data';
-    const staticData = await fetchJSON(`${dataPath}/${name}.json`);
-    if (staticData && staticData.runs) {
-      return {
-        runs: staticData.runs.map(normalizeRun),
-        conclusion: staticData.runs[0]?.conclusion || 'unknown',
-        totalCount: staticData.runs.length,
-        isStatic: true
-      };
+  // 2. Fetch jobs for recent CI runs (latest 3) to get Lint/Test/Security detail
+  const ciRuns = runs.filter(r => !isReleaseRun(r)).slice(0, 3);
+  for (const run of ciRuns) {
+    try {
+      const jobsUrl = `${GITHUB_API}/repos/${owner}/${name}/actions/runs/${run.id}/jobs`;
+      const jobsData = await fetchJSON(jobsUrl);
+      if (jobsData?.jobs) {
+        const jobs = jobsData.jobs.map(j => normalizeJob(j, run));
+        allJobs.push(...jobs);
+      }
+    } catch (_) {
+      // If jobs API fails, we'll still show run-level data
     }
-  } catch (_) {
-    console.warn(`Static data also unavailable for ${name}`);
   }
 
-  return null;
+  // 3. Categorise
+  const categories = categoriseData(runs, allJobs);
+  const latestConclusion = runs.length > 0 ? runs[0].conclusion : 'unknown';
+
+  return { runs, jobs: allJobs, categories, conclusion: latestConclusion, totalCount: runs.length };
 }
 
 function normalizeRun(run) {
   return {
-    id:            run.id,
-    name:          run.name || run.workflow_name || 'unknown',
-    status:        run.status || 'completed',
-    conclusion:    run.conclusion || 'unknown',
-    html_url:      run.html_url || '#',
-    created_at:    run.created_at || run.updated_at || new Date().toISOString(),
-    updated_at:    run.updated_at || run.created_at || new Date().toISOString(),
-    head_branch:   run.head_branch || 'main',
-    head_sha:      run.head_sha || '',
-    event:         run.event || 'push',
-    run_number:    run.run_number || 0,
-    actor:         run.actor || run.triggering_actor || null,
+    id:             run.id,
+    name:           run.name || run.workflow_name || 'unknown',
+    status:         run.status || 'completed',
+    conclusion:     run.conclusion || (run.status === 'completed' ? 'unknown' : 'in_progress'),
+    html_url:       run.html_url || '#',
+    created_at:     run.created_at || new Date().toISOString(),
+    updated_at:     run.updated_at || run.created_at || new Date().toISOString(),
+    head_branch:    run.head_branch || 'main',
+    head_sha:       run.head_sha || '',
+    event:          run.event || 'push',
+    run_number:     run.run_number || 0,
+    actor:          run.actor || run.triggering_actor || null,
     run_started_at: run.run_started_at || run.created_at
   };
 }
 
-// ─── Rendering ───
+function normalizeJob(job, parentRun) {
+  return {
+    id:          job.id,
+    name:        job.name || 'unknown',
+    status:      job.status || 'completed',
+    conclusion:  job.conclusion || 'unknown',
+    html_url:    job.html_url || parentRun.html_url || '#',
+    started_at:  job.started_at || parentRun.created_at,
+    completed_at: job.completed_at || parentRun.updated_at,
+    run_id:      parentRun.id,
+    run_number:  parentRun.run_number,
+    head_branch: parentRun.head_branch,
+    actor:       parentRun.actor,
+    event:       parentRun.event,
+    _parentRun:  parentRun
+  };
+}
+
+function isReleaseRun(run) {
+  const n = (run.name || '').toLowerCase();
+  return n.includes('release');
+}
+
+// ═══════════════════════════════════════════════════
+//  CATEGORISATION ENGINE
+// ═══════════════════════════════════════════════════
+function categoriseData(runs, jobs) {
+  const cats = {};
+  CATEGORIES.forEach(c => { cats[c.key] = { items: [], latest: null, conclusion: 'unknown' }; });
+
+  // First, categorise individual jobs (from CI runs)
+  jobs.forEach(job => {
+    const cat = classifyName(job.name);
+    if (cat && cats[cat]) {
+      cats[cat].items.push({
+        type: 'job',
+        id: job.id,
+        name: job.name,
+        conclusion: job.conclusion,
+        status: job.status,
+        html_url: job.html_url,
+        time: job.started_at,
+        duration: computeDuration(job.started_at, job.completed_at),
+        branch: job.head_branch,
+        run_number: job.run_number,
+        actor: job.actor
+      });
+    }
+  });
+
+  // Also add Release runs
+  const releaseRuns = runs.filter(isReleaseRun);
+  releaseRuns.forEach(run => {
+    cats['release'].items.push({
+      type: 'run',
+      id: run.id,
+      name: run.name,
+      conclusion: run.conclusion,
+      status: run.status,
+      html_url: run.html_url,
+      time: run.created_at,
+      duration: computeDuration(run.run_started_at || run.created_at, run.updated_at),
+      branch: run.head_branch,
+      run_number: run.run_number,
+      actor: run.actor
+    });
+  });
+
+  // If no jobs available (old runs), fall back to classifying run names
+  const hasJobs = jobs.length > 0;
+  if (!hasJobs) {
+    runs.filter(r => !isReleaseRun(r)).forEach(run => {
+      // Assign CI runs to the "test" category as best guess
+      cats['test'].items.push({
+        type: 'run',
+        id: run.id,
+        name: run.name,
+        conclusion: run.conclusion,
+        status: run.status,
+        html_url: run.html_url,
+        time: run.created_at,
+        duration: computeDuration(run.run_started_at || run.created_at, run.updated_at),
+        branch: run.head_branch,
+        run_number: run.run_number,
+        actor: run.actor
+      });
+    });
+  }
+
+  // Sort each category and set latest
+  Object.values(cats).forEach(cat => {
+    cat.items.sort((a, b) => new Date(b.time) - new Date(a.time));
+    cat.latest = cat.items[0] || null;
+    cat.conclusion = cat.latest?.conclusion || 'unknown';
+  });
+
+  return cats;
+}
+
+function classifyName(name) {
+  const lower = (name || '').toLowerCase();
+  for (const cat of CATEGORIES) {
+    for (const pattern of cat.patterns) {
+      if (pattern.test(lower)) return cat.key;
+    }
+  }
+  // Fallback: if name contains "ci status" or "ci pipeline", skip it
+  if (lower.includes('ci status') || lower.includes('ci pipeline')) return null;
+  return null;
+}
+
+function emptyCategories() {
+  const cats = {};
+  CATEGORIES.forEach(c => { cats[c.key] = { items: [], latest: null, conclusion: 'unknown' }; });
+  return cats;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDERING
+// ═══════════════════════════════════════════════════
 function render() {
   renderSummary();
   renderRepoCards();
@@ -190,7 +294,7 @@ function render() {
   renderInsights();
 }
 
-// Summary Strip
+// ── Summary ──
 function renderSummary() {
   const totalRuns = allRuns.length;
   const successful = allRuns.filter(r => r.conclusion === 'success').length;
@@ -198,19 +302,27 @@ function renderSummary() {
   const passRate = totalRuns > 0 ? ((successful / totalRuns) * 100).toFixed(1) : 0;
   const repos = manifest.repos || [];
   const healthyRepos = repos.filter(r => repoData[r.name]?.conclusion === 'success').length;
-
   const streak = computeStreak();
+
+  // Count security-specific stats
+  let secTotal = 0, secPass = 0;
+  repos.forEach(r => {
+    const cat = repoData[r.name]?.categories?.security;
+    if (cat && cat.items.length > 0) {
+      secTotal += cat.items.length;
+      secPass += cat.items.filter(i => i.conclusion === 'success').length;
+    }
+  });
 
   const cards = [
     { value: passRate + '%', label: 'Pass Rate', detail: `${successful} of ${totalRuns} runs`, accent: passRate >= 80 ? 'var(--success)' : passRate >= 50 ? 'var(--accent)' : 'var(--failure)' },
-    { value: totalRuns, label: 'Total Runs', detail: 'across all repos', accent: 'var(--accent)' },
     { value: `${healthyRepos}/${repos.length}`, label: 'Healthy Repos', detail: healthyRepos === repos.length ? 'all passing' : `${repos.length - healthyRepos} need attention`, accent: healthyRepos === repos.length ? 'var(--success)' : 'var(--failure)' },
     { value: failed, label: 'Failures', detail: failed === 0 ? 'none — great!' : 'review needed', accent: failed === 0 ? 'var(--success)' : 'var(--failure)' },
+    { value: `${secPass}/${secTotal || '—'}`, label: 'Security Scans', detail: secTotal === 0 ? 'no scans yet' : secPass === secTotal ? 'all clean' : 'issues found', accent: secTotal === 0 ? 'var(--accent)' : secPass === secTotal ? 'var(--success)' : 'var(--failure)' },
     { value: streak, label: 'Success Streak', detail: 'consecutive passes', accent: streak >= 5 ? 'var(--success)' : 'var(--accent)' }
   ];
 
-  const container = document.getElementById('summary-strip');
-  container.innerHTML = cards.map(c => `
+  document.getElementById('summary-strip').innerHTML = cards.map(c => `
     <div class="summary-card" style="--card-accent: ${c.accent}">
       <div class="summary-value">${c.value}</div>
       <div class="summary-label">${c.label}</div>
@@ -228,19 +340,19 @@ function computeStreak() {
   return streak;
 }
 
-// Repo Cards
+// ── Repo Cards (categorised) ──
 function renderRepoCards() {
   const repos = manifest.repos || [];
   const container = document.getElementById('repo-cards');
 
   container.innerHTML = repos.map(repo => {
-    const data = repoData[repo.name] || { runs: [], conclusion: 'unknown' };
-    const conclusion = data.conclusion || 'unknown';
-    const runs = (data.runs || []).slice(0, 8);
+    const data = repoData[repo.name] || { runs: [], categories: emptyCategories(), conclusion: 'unknown' };
+    const cats = data.categories || emptyCategories();
+    const overallConclusion = data.conclusion || 'unknown';
     const langClass = (repo.language || '').toLowerCase();
 
     return `
-      <div class="repo-card status-${conclusion}" data-repo="${repo.name}" data-status="${conclusion}">
+      <div class="repo-card status-${overallConclusion}" data-repo="${repo.name}" data-status="${overallConclusion}">
         <div class="repo-card-header">
           <div class="repo-icon">${repo.icon || '📦'}</div>
           <div class="repo-info">
@@ -250,53 +362,50 @@ function renderRepoCards() {
             </div>
             <div class="repo-desc">${repo.description || ''}</div>
           </div>
-          <span class="repo-status-badge ${conclusion}">${conclusionLabel(conclusion)}</span>
+          <span class="repo-status-badge ${overallConclusion}">${conclusionLabel(overallConclusion)}</span>
         </div>
+
+        <!-- Category Panels -->
         <div class="repo-card-body">
-          ${runs.length > 0 ? renderRunTable(runs) : '<div class="empty-state">No workflow runs found</div>'}
+          <div class="category-grid">
+            ${CATEGORIES.map(catDef => renderCategoryPanel(catDef, cats[catDef.key])).join('')}
+          </div>
         </div>
       </div>
     `;
   }).join('');
 }
 
-function renderRunTable(runs) {
-  const rows = runs.map(run => {
-    const duration = computeDuration(run.run_started_at || run.created_at, run.updated_at);
-    const timeAgo = relativeTime(run.created_at);
-    const sha = (run.head_sha || '').substring(0, 7);
+function renderCategoryPanel(catDef, catData) {
+  const latest = catData?.latest;
+  const items = (catData?.items || []).slice(0, 5);
+  const conclusion = catData?.conclusion || 'unknown';
 
-    return `
-      <tr>
-        <td>
-          <span class="run-status-dot ${run.conclusion}"></span>
-          <a class="run-link" href="${run.html_url}" target="_blank">#${run.run_number}</a>
-        </td>
-        <td>${run.name}</td>
-        <td><span class="run-branch">${run.head_branch}</span></td>
-        <td class="run-duration mono">${duration}</td>
-        <td class="text-muted">${timeAgo}</td>
-      </tr>
-    `;
-  }).join('');
+  const statusDot = `<span class="run-status-dot ${conclusion}"></span>`;
+  const latestInfo = latest
+    ? `<a class="run-link" href="${latest.html_url}" target="_blank">#${latest.run_number}</a>
+       <span class="text-muted">${latest.duration}</span>`
+    : '<span class="text-muted">no runs</span>';
+
+  // Mini history dots
+  const historyDots = items.map(item =>
+    `<span class="history-dot ${item.conclusion}" title="#${item.run_number} — ${item.conclusion}"></span>`
+  ).join('');
 
   return `
-    <table class="run-table">
-      <thead>
-        <tr>
-          <th>Run</th>
-          <th>Workflow</th>
-          <th>Branch</th>
-          <th>Duration</th>
-          <th>When</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="category-panel cat-${conclusion}">
+      <div class="category-header">
+        <span class="category-icon">${catDef.icon}</span>
+        <span class="category-label">${catDef.label}</span>
+        ${statusDot}
+      </div>
+      <div class="category-latest">${latestInfo}</div>
+      <div class="category-history">${historyDots || '<span class="text-muted">—</span>'}</div>
+    </div>
   `;
 }
 
-// Timeline
+// ── Timeline ──
 function renderTimeline() {
   const container = document.getElementById('timeline');
   const countEl = document.getElementById('timeline-count');
@@ -315,6 +424,8 @@ function renderTimeline() {
     const timeAgo = relativeTime(run.created_at);
     const duration = computeDuration(run.run_started_at || run.created_at, run.updated_at);
     const actor = run.actor?.login || 'unknown';
+    const catKey = isReleaseRun(run) ? 'release' : 'ci';
+    const catIcon = isReleaseRun(run) ? '🚀' : '⚙️';
 
     return `
       <div class="timeline-item">
@@ -323,7 +434,7 @@ function renderTimeline() {
           <div class="timeline-header">
             <span class="timeline-repo">${repo.displayName || repo.name || 'unknown'}</span>
             <span class="timeline-workflow">
-              <a href="${run.html_url}" target="_blank">${run.name} #${run.run_number}</a>
+              ${catIcon} <a href="${run.html_url}" target="_blank">${run.name} #${run.run_number}</a>
             </span>
           </div>
           <div class="timeline-meta">
@@ -338,7 +449,7 @@ function renderTimeline() {
   }).join('');
 }
 
-// Insights
+// ── Insights ──
 function renderInsights() {
   renderLangBreakdown();
   renderWorkflowBreakdown();
@@ -348,62 +459,49 @@ function renderInsights() {
 
 function renderLangBreakdown() {
   const container = document.getElementById('lang-breakdown');
-  const repos = manifest.repos || [];
   const langCounts = {};
 
   allRuns.forEach(run => {
-    const repo = run._repo || {};
-    const lang = repo.language || 'Unknown';
+    const lang = run._repo?.language || 'Unknown';
     if (!langCounts[lang]) langCounts[lang] = { total: 0, success: 0 };
     langCounts[lang].total++;
     if (run.conclusion === 'success') langCounts[lang].success++;
   });
 
   const maxTotal = Math.max(...Object.values(langCounts).map(c => c.total), 1);
-
   container.innerHTML = Object.entries(langCounts)
     .sort((a, b) => b[1].total - a[1].total)
-    .map(([lang, counts]) => `
-      <div class="insight-bar-row">
-        <span class="insight-bar-label">${lang}</span>
-        <div class="insight-bar-track">
-          <div class="insight-bar-fill success" style="width: ${(counts.success / maxTotal) * 100}%"></div>
-        </div>
-        <span class="insight-bar-value">${counts.success}/${counts.total}</span>
-      </div>
-    `).join('');
+    .map(([lang, c]) => barRow(lang, c.success, maxTotal, `${c.success}/${c.total}`, 'success'))
+    .join('');
 }
 
 function renderWorkflowBreakdown() {
   const container = document.getElementById('workflow-breakdown');
-  const wfCounts = {};
+  // Show by category instead of raw workflow name
+  const catCounts = {};
+  CATEGORIES.forEach(c => { catCounts[c.label] = { total: 0, success: 0 }; });
 
-  allRuns.forEach(run => {
-    const name = run.name || 'Unknown';
-    if (!wfCounts[name]) wfCounts[name] = { total: 0, success: 0 };
-    wfCounts[name].total++;
-    if (run.conclusion === 'success') wfCounts[name].success++;
+  Object.values(repoData).forEach(rd => {
+    const cats = rd.categories || {};
+    Object.entries(cats).forEach(([key, cat]) => {
+      const label = CATEGORIES.find(c => c.key === key)?.label || key;
+      if (!catCounts[label]) catCounts[label] = { total: 0, success: 0 };
+      catCounts[label].total += cat.items.length;
+      catCounts[label].success += cat.items.filter(i => i.conclusion === 'success').length;
+    });
   });
 
-  const maxTotal = Math.max(...Object.values(wfCounts).map(c => c.total), 1);
-
-  container.innerHTML = Object.entries(wfCounts)
+  const maxTotal = Math.max(...Object.values(catCounts).map(c => c.total), 1);
+  container.innerHTML = Object.entries(catCounts)
+    .filter(([_, c]) => c.total > 0)
     .sort((a, b) => b[1].total - a[1].total)
-    .map(([name, counts]) => `
-      <div class="insight-bar-row">
-        <span class="insight-bar-label">${name}</span>
-        <div class="insight-bar-track">
-          <div class="insight-bar-fill" style="width: ${(counts.total / maxTotal) * 100}%"></div>
-        </div>
-        <span class="insight-bar-value">${counts.total}</span>
-      </div>
-    `).join('');
+    .map(([name, c]) => barRow(name, c.success, maxTotal, `${c.success}/${c.total}`, 'success'))
+    .join('') || '<div class="text-muted">No data yet</div>';
 }
 
 function renderAuthorBreakdown() {
   const container = document.getElementById('author-breakdown');
   const authors = {};
-
   allRuns.forEach(run => {
     const login = run.actor?.login;
     if (!login) return;
@@ -426,86 +524,62 @@ function renderAuthorBreakdown() {
 function renderBranchBreakdown() {
   const container = document.getElementById('branch-breakdown');
   const branches = {};
-
-  allRuns.forEach(run => {
-    const branch = run.head_branch || 'unknown';
-    if (!branches[branch]) branches[branch] = 0;
-    branches[branch]++;
-  });
-
+  allRuns.forEach(run => { const b = run.head_branch || 'unknown'; branches[b] = (branches[b] || 0) + 1; });
   const maxCount = Math.max(...Object.values(branches), 1);
-
   container.innerHTML = Object.entries(branches)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6)
-    .map(([branch, count]) => `
-      <div class="insight-bar-row">
-        <span class="insight-bar-label mono">${branch}</span>
-        <div class="insight-bar-track">
-          <div class="insight-bar-fill" style="width: ${(count / maxCount) * 100}%"></div>
-        </div>
-        <span class="insight-bar-value">${count}</span>
-      </div>
-    `).join('');
+    .map(([branch, count]) => barRow(branch, count, maxCount, count, ''))
+    .join('');
 }
 
-// ─── Filters ───
+function barRow(label, fillValue, maxValue, displayValue, fillClass) {
+  return `
+    <div class="insight-bar-row">
+      <span class="insight-bar-label">${label}</span>
+      <div class="insight-bar-track">
+        <div class="insight-bar-fill ${fillClass}" style="width: ${(fillValue / maxValue) * 100}%"></div>
+      </div>
+      <span class="insight-bar-value">${displayValue}</span>
+    </div>
+  `;
+}
+
+// ── Filters ──
 function applyRepoFilter(filter) {
   document.querySelectorAll('.repo-card').forEach(card => {
-    if (filter === 'all') {
-      card.classList.remove('hidden');
-    } else {
-      card.classList.toggle('hidden', card.dataset.status !== filter);
-    }
+    card.classList.toggle('hidden', filter !== 'all' && card.dataset.status !== filter);
   });
 }
 
-// ─── Utilities ───
+// ═══════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════
 async function fetchJSON(url) {
-  const opts = {};
-  // No auth header for public repos — avoid CORS issues
-  const resp = await fetch(url, opts);
+  const resp = await fetch(url);
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
   return resp.json();
 }
 
 function conclusionLabel(c) {
-  const map = {
-    success:     'Passing',
-    failure:     'Failing',
-    cancelled:   'Cancelled',
-    skipped:     'Skipped',
-    in_progress: 'Running',
-    unknown:     'Unknown'
-  };
-  return map[c] || c;
+  return { success: 'Passing', failure: 'Failing', cancelled: 'Cancelled', skipped: 'Skipped', in_progress: 'Running', unknown: 'Unknown' }[c] || c;
 }
 
 function computeDuration(start, end) {
   if (!start || !end) return '—';
   const ms = new Date(end) - new Date(start);
   if (ms < 0) return '—';
-  const secs = Math.floor(ms / 1000);
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  const remSecs = secs % 60;
-  if (mins < 60) return `${mins}m ${remSecs}s`;
-  const hrs = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  return `${hrs}h ${remMins}m`;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), rs = s % 60;
+  if (m < 60) return `${m}m ${rs}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 function relativeTime(dateStr) {
   if (!dateStr) return '—';
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-
-  const SEC = 1000;
-  const MIN = 60 * SEC;
-  const HOUR = 60 * MIN;
-  const DAY = 24 * HOUR;
-
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const MIN = 60000, HOUR = 3600000, DAY = 86400000;
   if (diff < MIN) return 'just now';
   if (diff < HOUR) return `${Math.floor(diff / MIN)}m ago`;
   if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
@@ -517,9 +591,8 @@ function loadCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (Date.now() - data.ts > CACHE_TTL) return null;
-    return data;
+    const d = JSON.parse(raw);
+    return (Date.now() - d.ts <= CACHE_TTL) ? d : null;
   } catch (_) { return null; }
 }
 
@@ -533,29 +606,20 @@ function setRefreshing(on) {
 function updateDataSourceBadge(source) {
   const badge = document.getElementById('data-source-badge');
   badge.className = 'badge';
-  if (source === 'live') {
-    badge.textContent = 'LIVE';
-  } else if (source === 'cached') {
-    badge.textContent = 'CACHED';
-    badge.classList.add('stale');
-  } else {
-    badge.textContent = 'ERROR';
-    badge.classList.add('error');
-  }
+  if (source === 'live') { badge.textContent = 'LIVE'; }
+  else if (source === 'cached') { badge.textContent = 'CACHED'; badge.classList.add('stale'); }
+  else { badge.textContent = 'ERROR'; badge.classList.add('error'); }
 }
 
 function updateLastRefreshed() {
-  const el = document.getElementById('last-updated');
-  el.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
-  const interval = manifest?.refreshIntervalMs || 300000; // 5 min default
-  refreshTimer = setInterval(() => refresh(), interval);
+  refreshTimer = setInterval(() => refresh(), manifest?.refreshIntervalMs || 300000);
 }
 
 function showGlobalError(msg) {
-  const summaryEl = document.getElementById('summary-strip');
-  summaryEl.innerHTML = `<div class="error-state" style="grid-column: 1/-1;">${msg}</div>`;
+  document.getElementById('summary-strip').innerHTML = `<div class="error-state" style="grid-column:1/-1">${msg}</div>`;
 }
