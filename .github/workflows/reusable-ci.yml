@@ -39,6 +39,8 @@ jobs:
   ci:
     name: CI Pipeline
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     defaults:
       run:
         working-directory: ${{ inputs.working_directory }}
@@ -134,7 +136,7 @@ jobs:
 
       # ── 8. Slack notification on failure ──
       - name: Notify Slack on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
         with:
           status: failure
@@ -144,7 +146,7 @@ jobs:
 
       # ── 9. Slack notification on success (main branch only) ──
       - name: Notify Slack on success
-        if: success() && secrets.SLACK_WEBHOOK_URL != '' && github.ref == 'refs/heads/main'
+        if: success() && env.SLACK_WEBHOOK_URL != '' && github.ref == 'refs/heads/main'
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
         with:
           status: success

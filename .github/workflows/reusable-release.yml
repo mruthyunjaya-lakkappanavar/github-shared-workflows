@@ -34,6 +34,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       # ── 1. Checkout (full history for changelog) ──
@@ -52,7 +54,7 @@ jobs:
 
       # ── 3. Slack notification on new release ──
       - name: Notify Slack on release
-        if: steps.release.outputs.release_created && inputs.enable_slack_notify && secrets.SLACK_WEBHOOK_URL != ''
+        if: steps.release.outputs.release_created && inputs.enable_slack_notify && env.SLACK_WEBHOOK_URL != ''
         uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
         with:
           status: release
