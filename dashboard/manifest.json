@@ -1,0 +1,32 @@
+{
+  "owner": "mruthyunjaya-lakkappanavar",
+  "title": "CI/CD Dashboard",
+  "subtitle": "Cross-repo workflow visibility for GitHub Shared Workflows",
+  "version": "v2.0",
+  "repos": [
+    {
+      "name": "sample-app-python",
+      "displayName": "Sample App Python",
+      "language": "Python",
+      "icon": "🐍",
+      "description": "FastAPI application with shared CI/CD"
+    },
+    {
+      "name": "sample-app-node",
+      "displayName": "Sample App Node",
+      "language": "TypeScript",
+      "icon": "📦",
+      "description": "Express TypeScript application with shared CI/CD"
+    },
+    {
+      "name": "sample-app-go",
+      "displayName": "Sample App Go",
+      "language": "Go",
+      "icon": "🐹",
+      "description": "Go HTTP server with shared CI/CD"
+    }
+  ],
+  "refreshIntervalMs": 300000,
+  "maxRunsPerRepo": 20,
+  "dataPath": "data"
+}
