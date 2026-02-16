@@ -102,6 +102,7 @@ jobs:
     name: "Lint"
     if: ${{ inputs.enable_lint }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       status: ${{ steps.result.outputs.status }}
       error_count: ${{ steps.result.outputs.error_count }}
@@ -192,6 +193,7 @@ jobs:
   test:
     name: "Test (${{ matrix.version }}, ${{ matrix.os }}, ${{ matrix.test_type }})"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: ${{ inputs.fail_fast }}
       matrix:
@@ -364,6 +366,7 @@ jobs:
     name: "Security Scan"
     if: ${{ inputs.enable_security }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       status: ${{ steps.result.outputs.status }}
       total_findings: ${{ steps.result.outputs.total_findings }}
@@ -448,6 +451,7 @@ jobs:
     name: "Build"
     if: ${{ inputs.enable_build }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       status: ${{ steps.result.outputs.status }}
     defaults:

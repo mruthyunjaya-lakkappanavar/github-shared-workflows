@@ -125,6 +125,7 @@ jobs:
     name: "Sanity Tests"
     if: ${{ inputs.enable_sanity }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       status: ${{ steps.result.outputs.status }}
 
@@ -262,6 +263,7 @@ jobs:
     name: "Regression (${{ matrix.version }})"
     if: ${{ inputs.enable_regression }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -390,6 +392,7 @@ jobs:
     name: "Performance Tests"
     if: ${{ inputs.enable_performance }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       status: ${{ steps.result.outputs.status }}
 
@@ -507,6 +510,7 @@ jobs:
     if: ${{ inputs.enable_docker_build }}
     needs: [sanity, regression]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
       image_digest: ${{ steps.build.outputs.digest }}

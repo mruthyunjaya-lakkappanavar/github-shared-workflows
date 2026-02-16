@@ -273,26 +273,33 @@ Manual dispatch or release tag
 
 ## Jenkins Shared Library Comparison
 
-| Jenkins Concept | GitHub Actions Equivalent |
-|---|---|
-| Shared Library repository | `github-shared-workflows` repository |
-| `vars/*.groovy` (pipeline steps) | Composite actions (`actions/*/action.yml`) |
-| `Jenkinsfile` | `.github/workflows/*.yml` |
-| `@Library('shared')` import | `uses: owner/repo/.github/workflows/file.yml@ref` |
-| Library parameters | `workflow_call` inputs |
-| Credentials binding | GitHub Secrets + `secrets:` passthrough |
-| Jenkins Dashboard | GitHub Pages dashboard |
-| Pipeline stages | Workflow jobs/steps |
-| **Matrix builds** (`matrix {}` axis) | `strategy.matrix` with `fromJSON()` for dynamic axes |
-| **Docker agent / `agent { docker {} }`** | `services:` block (PostgreSQL, Redis as sidecars) |
-| **`stage('Deploy to Staging')`** | `environment:` with protection rules + approval gates |
-| **Docker build/push plugin** | `docker/build-push-action` with BuildX + GHA layer cache |
-| **Jenkins credentials (OIDC)** | `id-token: write` permission (native OIDC, no plugins) |
-| **`parallel { }` block** | Multiple jobs in same workflow (DAG via `needs:`) |
-| **`lock()` / throttle** | `concurrency:` groups with `cancel-in-progress` |
-| **Shared Lib `call()` method** | `workflow_call` with typed inputs/secrets |
-| **Build artifacts archiving** | `actions/upload-artifact` / `download-artifact` v4 |
-| **Pipeline `post { always {} }`** | `if: always()` on jobs/steps |
+| Jenkins Concept | GitHub Actions Equivalent | Where Demonstrated |
+|---|---|---|
+| Shared Library repository | `github-shared-workflows` repository | This repo |
+| `vars/*.groovy` (pipeline steps) | Composite actions (`actions/*/action.yml`) | setup-toolchain, slack-notify |
+| `Jenkinsfile` | `.github/workflows/*.yml` | Consumer repos |
+| `@Library('shared')` import | `uses: owner/repo/.github/workflows/file.yml@ref` | All consumer workflows |
+| Library parameters | `workflow_call` inputs | All reusable workflows |
+| Credentials binding | GitHub Secrets + `secrets:` passthrough | reusable-ci, reusable-publish |
+| Jenkins Dashboard | GitHub Pages dashboard | dashboard/ |
+| Pipeline stages | Workflow jobs/steps | All workflows |
+| **Matrix builds** (`matrix {}` axis) | `strategy.matrix` with `fromJSON()` for dynamic axes | reusable-matrix-ci |
+| **Docker agent / `agent { docker {} }`** | `services:` block (PostgreSQL, Redis as sidecars) | reusable-integration-ci |
+| **`stage('Deploy to Staging')`** | `environment:` with protection rules + approval gates | reusable-publish, reusable-integration-ci |
+| **Docker build/push plugin** | `docker/build-push-action` with BuildX + GHA layer cache | reusable-integration-ci |
+| **Jenkins credentials (OIDC)** | `id-token: write` permission (native OIDC, no plugins) | reusable-publish |
+| **`parallel { }` block** | Multiple jobs in same workflow (DAG via `needs:`) | reusable-integration-ci |
+| **`lock()` / throttle** | `concurrency:` groups with `cancel-in-progress` | Consumer ci.yml files |
+| **Shared Lib `call()` method** | `workflow_call` with typed inputs/secrets | All reusable workflows |
+| **Build artifacts archiving** | `actions/upload-artifact` / `download-artifact` v4 | reusable-matrix-ci, reusable-publish |
+| **Pipeline `post { always {} }`** | `if: always()` on jobs/steps | All reusable workflows |
+| **`timeout(time: 30, unit: 'MINUTES')`** | `timeout-minutes:` on jobs | All reusable workflows |
+| **`disableConcurrentBuilds()`** | `concurrency:` + `cancel-in-progress: true` | Consumer ci.yml files |
+| **`triggers { cron('0 2 * * *') }`** | `schedule:` with cron syntax | Consumer ci.yml files |
+| **`parameters { choice() }`** | `workflow_dispatch.inputs` with `type: choice` | Consumer ci.yml files |
+| **`when { changeset "src/**" }`** | `on.push.paths` filter | Consumer ci.yml files |
+| **`failFast false`** | `strategy.fail-fast: false` | reusable-matrix-ci |
+| **`retry(3) { }`** | Retry-logic in setup-toolchain composite action | setup-toolchain |
 
 ### GHA Capabilities Beyond Jenkins
 
@@ -300,9 +307,14 @@ Manual dispatch or release tag
 |---|---|---|
 | **OIDC Federation** | Native (`id-token: write`) — no stored secrets | Requires plugin + credential store |
 | **Hosted runners** | Free (ubuntu/macos/windows), zero maintenance | Self-hosted only (or CloudBees) |
-| **Concurrency groups** | Built-in `concurrency:` key | Requires Lockable Resources plugin |
+| **Concurrency groups** | Built-in `concurrency:` key with cancel-in-progress | Requires Lockable Resources plugin |
 | **Dynamic matrix** | `fromJSON()` generates axes at runtime | Scripted pipeline or Matrix plugin |
-| **Environment gates** | UI-based approvals with reviewers | Requires Input step or Role Strategy |
+| **Environment gates** | UI-based approvals with reviewers + wait timers | Requires Input step or Role Strategy |
 | **Starter workflows** | Org-wide templates in `.github` repo | Shared Library + job-dsl |
 | **Dependency caching** | `actions/cache` or built-in (`setup-node`, etc.) | Plugin-based (e.g., Artifactory cache) |
+| **Dependabot** | Native dependency update PRs — zero config | No built-in equivalent |
+| **Cancel-in-progress** | Auto-cancel redundant runs on same branch | No built-in equivalent |
+| **Path-based triggers** | `on.push.paths` — skip CI when irrelevant files change | Requires changeset condition (limited) |
+| **GITHUB_TOKEN** | Auto-scoped, auto-rotated, per-job permissions | Manual credential management |
+| **Docker layer cache (GHA)** | `cache-from: type=gha` — shared across runs | Requires registry or volume caching |
 | **Immutable logs** | GitHub-hosted, tamper-proof | Self-managed, needs backup strategy |

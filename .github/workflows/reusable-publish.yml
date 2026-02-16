@@ -87,6 +87,7 @@ jobs:
   build:
     name: "Build Package"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       package_version: ${{ steps.version.outputs.version }}
       package_name: ${{ steps.version.outputs.name }}
@@ -169,6 +170,7 @@ jobs:
     if: ${{ inputs.publish_staging }}
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: staging        # ← GitHub Environment (no Jenkins equivalent out-of-box)
     defaults:
       run:
@@ -250,6 +252,7 @@ jobs:
     if: ${{ inputs.publish_production }}
     needs: [build, publish-staging]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: production     # ← Requires manual approval via GitHub Environment protection rules
     defaults:
       run:

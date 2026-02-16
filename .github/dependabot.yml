@@ -1,0 +1,22 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Dependabot — Automated dependency update PRs (GHA-exclusive, no Jenkins equivalent)
+#
+#  This feature has NO equivalent in Jenkins out of the box:
+#  - Jenkins: Manual dependency updates or custom scripts
+#  - GHA:     Native Dependabot creates PRs automatically with changelogs
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: 2
+updates:
+  # Keep GitHub Actions up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 5

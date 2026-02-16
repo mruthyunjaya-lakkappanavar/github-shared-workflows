@@ -53,6 +53,7 @@ jobs:
     name: Lint
     if: ${{ inputs.enable_lint }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       status: ${{ steps.result.outputs.status }}
       error_count: ${{ steps.result.outputs.error_count }}
@@ -164,6 +165,7 @@ jobs:
     name: Test
     if: ${{ inputs.enable_test }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       status: ${{ steps.result.outputs.status }}
       total: ${{ steps.result.outputs.total }}
@@ -326,6 +328,7 @@ jobs:
     name: Security Scan
     if: ${{ inputs.enable_security_scan }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       status: ${{ steps.result.outputs.status }}
       sast_findings: ${{ steps.result.outputs.sast_findings }}
