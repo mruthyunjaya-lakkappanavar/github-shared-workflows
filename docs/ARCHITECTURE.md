@@ -5,59 +5,81 @@
 ## System Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  github-shared-workflows                     │
-│                    (Central Repository)                       │
-│                                                              │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │  reusable-ci.yml │  │reusable-release  │                 │
-│  │                  │  │     .yml         │                 │
-│  │  • Checkout      │  │  • Checkout      │                 │
-│  │  • Setup tool    │  │  • Version bump  │                 │
-│  │  • Install deps  │  │  • Changelog     │                 │
-│  │  • Lint          │  │  • GH Release    │                 │
-│  │  • Test          │  │  • Slack notify  │                 │
-│  │  • Trivy scan    │  │                  │                 │
-│  │  • Slack notify  │  └──────────────────┘                 │
-│  └──────────────────┘                                        │
-│                                                              │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │ setup-toolchain  │  │  slack-notify    │                 │
-│  │   (composite)    │  │   (composite)    │                 │
-│  │  • Python setup  │  │  • Color-coded   │                 │
-│  │  • Node setup    │  │  • Block Kit     │                 │
-│  │  • Caching       │  │  • Webhooks      │                 │
-│  └──────────────────┘  └──────────────────┘                 │
-│                                                              │
-│  ┌──────────────────────────────────────────┐               │
-│  │           Dashboard (GitHub Pages)        │               │
-│  │  • Workflow status grid                   │               │
-│  │  • Health summary                         │               │
-│  │  • Activity feed                          │               │
-│  │  • Repository cards                       │               │
-│  └──────────────────────────────────────────┘               │
-└─────────────────────────────────────────────────────────────┘
-          ▲ workflow_call              ▲ workflow_call
-          │                            │
-┌─────────┴──────────┐    ┌──────────┴───────────┐
-│ sample-app-python  │    │  sample-app-node     │
-│                    │    │                      │
-│  ci.yml (~15 LOC)  │    │  ci.yml (~15 LOC)   │
-│  release.yml       │    │  release.yml        │
-│  (~15 LOC)         │    │  (~15 LOC)          │
-│                    │    │                      │
-│  Flask app         │    │  Express app        │
-│  pytest            │    │  Jest               │
-│  flake8            │    │  ESLint             │
-└────────────────────┘    └──────────────────────┘
-          │                            │
-          └──────────┬─────────────────┘
-                     ▼
-             ┌──────────────┐
-             │    Slack      │
-             │  #builds     │
-             │  #releases   │
-             └──────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                           github-shared-workflows                                   │
+│                             (Central Repository)                                    │
+│                                                                                     │
+│  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────────┐     │
+│  │   reusable-ci.yml   │  │ reusable-release.yml│  │ reusable-matrix-ci.yml  │     │
+│  │                     │  │                     │  │                         │     │
+│  │  • Lint             │  │  • Release Please   │  │  • Version × OS matrix  │     │
+│  │  • Test             │  │  • Changelog        │  │  • Parallel test types  │     │
+│  │  • Security Scan    │  │  • GH Release       │  │  • Build verification   │     │
+│  │  • CI Summary       │  │  • Slack notify     │  │  • fromJSON() dynamic   │     │
+│  │  • Slack notify     │  │                     │  │  • Matrix summary       │     │
+│  └─────────────────────┘  └─────────────────────┘  └─────────────────────────┘     │
+│                                                                                     │
+│  ┌──────────────────────────┐  ┌───────────────────────────┐                       │
+│  │ reusable-integration-ci  │  │   reusable-publish.yml    │                       │
+│  │         .yml             │  │                           │                       │
+│  │  • Service containers    │  │  • Build → Package        │                       │
+│  │    (PostgreSQL, Redis)   │  │  • Staging (@next tag)    │                       │
+│  │  • Sanity tests          │  │  • Production (@latest)   │                       │
+│  │  • Regression matrix     │  │  • Environment gates      │                       │
+│  │  • Performance tests     │  │  • GitHub Releases        │                       │
+│  │  • Docker build/push     │  │  • OIDC token support     │                       │
+│  │  • Deploy staging/prod   │  │                           │                       │
+│  └──────────────────────────┘  └───────────────────────────┘                       │
+│                                                                                     │
+│  ┌─────────────────────┐  ┌─────────────────────┐                                  │
+│  │  setup-toolchain    │  │   slack-notify      │                                  │
+│  │   (composite)       │  │   (composite)       │                                  │
+│  │  • Python/Node/Go   │  │  • Color-coded      │                                  │
+│  │  • Dep caching      │  │  • Block Kit        │                                  │
+│  └─────────────────────┘  └─────────────────────┘                                  │
+│                                                                                     │
+│  ┌──────────────────────────────────────────────────────┐                           │
+│  │                Dashboard (GitHub Pages)               │                           │
+│  │  • Workflow status grid  • Repository cards           │                           │
+│  │  • Health summary        • Activity feed              │                           │
+│  └──────────────────────────────────────────────────────┘                           │
+└────────────────────────────────────────────────────────────────────────────────────┘
+          ▲ workflow_call              ▲ workflow_call              ▲ workflow_call
+          │                            │                            │
+┌─────────┴──────────┐    ┌──────────┴───────────┐    ┌──────────┴───────────┐
+│ sample-app-python  │    │  sample-app-node     │    │  sample-app-go      │
+│                    │    │                      │    │                      │
+│  ci.yml calls:     │    │  ci.yml (~15 LOC)   │    │  ci.yml (~15 LOC)   │
+│  • reusable-ci     │    │  release.yml        │    │  release.yml        │
+│  • reusable-       │    │                      │    │                      │
+│    integration-ci  │    │  Express+TS app     │    │  Go HTTP server     │
+│  release.yml       │    │  Jest               │    │  go test            │
+│                    │    │  ESLint             │    │  golangci-lint      │
+│  FastAPI + SQLAlch │    │                      │    │                      │
+│  PostgreSQL (CI)   │    └──────────────────────┘    └──────────────────────┘
+│  Dockerfile        │
+│  Sanity/Regression/│               ┌──────────────────────────┐
+│  Performance tests │               │   sample-lib-node (NEW)  │
+└────────────────────┘               │                          │
+          │                          │  ci.yml calls:           │
+          │                          │  • reusable-matrix-ci    │
+          │                          │  publish.yml calls:      │
+          │                          │  • reusable-publish      │
+          │                          │  release.yml             │
+          │                          │                          │
+          │                          │  HTTP client library     │
+          │                          │  Node 18/20/22 × 3 OS   │
+          │                          │  Unit + Integration      │
+          │                          │  npm package publishing  │
+          │                          └──────────────────────────┘
+          │                                      │
+          └──────────────┬───────────────────────┘
+                         ▼
+                 ┌──────────────┐
+                 │    Slack      │
+                 │  #builds     │
+                 │  #releases   │
+                 └──────────────┘
 ```
 
 ## Design Decisions
@@ -122,6 +144,24 @@ Release Please is simpler, creates reviewable release PRs, and has zero runtime 
 
 Slack was chosen for its rich Block Kit formatting, incoming webhook simplicity, and industry adoption.
 
+### 7. Why `fromJSON()` for Dynamic Matrix?
+
+GitHub Actions `strategy.matrix` accepts a static YAML list OR a JSON string via `fromJSON()`. By accepting `language_versions`, `os_matrix`, and `test_types` as JSON-array strings from consumer workflows, the reusable workflow becomes fully dynamic — consumers control the matrix dimensions without forking or modifying the shared workflow. This is the GHA equivalent of Jenkins' `matrix {}` axis declarations but more flexible since axes are runtime inputs.
+
+### 8. Why Service Containers over Docker Compose?
+
+| Approach | Pros | Cons |
+|---|---|---|
+| **Service containers (chosen)** | Native GHA, auto-networking, health checks | Linux runners only |
+| Docker Compose | Full control, local parity | Requires manual setup, slower startup |
+| Testcontainers | Programmatic, language-native | Requires DinD or special runner config |
+
+Service containers are the idiomatic GHA approach — the runner manages lifecycle, networking (localhost ports), and health checks automatically. They map directly to Jenkins' `agent { docker {} }` with linked services.
+
+### 9. Why GitHub Environments for Deployment Gates?
+
+GitHub Environments provide UI-based approval gates, deployment history, and environment-specific secrets — all without plugins. In Jenkins, achieving the same requires the Input step, Role Strategy plugin, and manual credential scoping. GHA environments also integrate with OIDC for cloud provider authentication, eliminating long-lived secrets entirely.
+
 ## Data Flow
 
 ### CI Pipeline Flow
@@ -170,6 +210,67 @@ User visits dashboard
   → Auto-refreshes every 5 minutes
 ```
 
+### Matrix CI Pipeline Flow
+
+```
+Developer pushes code
+  → Consumer repo ci.yml triggers
+    → Calls reusable-matrix-ci.yml via workflow_call
+      → Lint job runs (single runner)
+      → Matrix test job expands via fromJSON():
+        ┌─ Node 18 × ubuntu  × unit
+        ├─ Node 18 × ubuntu  × integration
+        ├─ Node 18 × macos   × unit
+        ├─ Node 18 × macos   × integration
+        ├─ Node 20 × ubuntu  × unit
+        ├─ ... (N versions × M OSes × K test types)
+        └─ Node 22 × windows × integration
+      → Each cell: setup → deps → run tests → upload result artifact
+      → Security scan job (single runner)
+      → Build verification job (optional, single runner)
+      → Summary job:
+        → Downloads all result artifacts
+        → Aggregates into markdown table
+        → Posts as PR comment via github-script
+```
+
+### Integration CI Pipeline Flow
+
+```
+Developer pushes code (sample-app-python)
+  → Consumer ci.yml triggers
+    → Calls reusable-integration-ci.yml via workflow_call
+      → Parallel stage 1:
+        ┌─ Sanity tests (PostgreSQL + Redis service containers)
+        ├─ Regression tests (version matrix × PostgreSQL)
+        └─ Performance tests (response time, throughput, stress)
+      → Docker build job (depends on all test stages)
+        → docker/build-push-action with BuildX + GHA cache
+        → Push to GHCR
+      → Deploy staging (environment: staging)
+      → Deploy production (environment: production, manual approval)
+      → Integration summary job
+```
+
+### Publish Pipeline Flow
+
+```
+Manual dispatch or release tag
+  → Consumer publish.yml triggers
+    → Calls reusable-publish.yml via workflow_call
+      → Build job:
+        → Extract version from package.json / setup.py
+        → Build package (npm pack / python -m build)
+        → Upload artifact
+      → Publish staging (environment: staging):
+        → Download artifact
+        → Publish with @next / --index-url test.pypi.org
+      → Publish production (environment: production, approval gate):
+        → Download artifact
+        → Publish with @latest / --index-url pypi.org
+        → Create GitHub Release
+```
+
 ## Jenkins Shared Library Comparison
 
 | Jenkins Concept | GitHub Actions Equivalent |
@@ -182,3 +283,26 @@ User visits dashboard
 | Credentials binding | GitHub Secrets + `secrets:` passthrough |
 | Jenkins Dashboard | GitHub Pages dashboard |
 | Pipeline stages | Workflow jobs/steps |
+| **Matrix builds** (`matrix {}` axis) | `strategy.matrix` with `fromJSON()` for dynamic axes |
+| **Docker agent / `agent { docker {} }`** | `services:` block (PostgreSQL, Redis as sidecars) |
+| **`stage('Deploy to Staging')`** | `environment:` with protection rules + approval gates |
+| **Docker build/push plugin** | `docker/build-push-action` with BuildX + GHA layer cache |
+| **Jenkins credentials (OIDC)** | `id-token: write` permission (native OIDC, no plugins) |
+| **`parallel { }` block** | Multiple jobs in same workflow (DAG via `needs:`) |
+| **`lock()` / throttle** | `concurrency:` groups with `cancel-in-progress` |
+| **Shared Lib `call()` method** | `workflow_call` with typed inputs/secrets |
+| **Build artifacts archiving** | `actions/upload-artifact` / `download-artifact` v4 |
+| **Pipeline `post { always {} }`** | `if: always()` on jobs/steps |
+
+### GHA Capabilities Beyond Jenkins
+
+| Feature | GitHub Actions | Jenkins |
+|---|---|---|
+| **OIDC Federation** | Native (`id-token: write`) — no stored secrets | Requires plugin + credential store |
+| **Hosted runners** | Free (ubuntu/macos/windows), zero maintenance | Self-hosted only (or CloudBees) |
+| **Concurrency groups** | Built-in `concurrency:` key | Requires Lockable Resources plugin |
+| **Dynamic matrix** | `fromJSON()` generates axes at runtime | Scripted pipeline or Matrix plugin |
+| **Environment gates** | UI-based approvals with reviewers | Requires Input step or Role Strategy |
+| **Starter workflows** | Org-wide templates in `.github` repo | Shared Library + job-dsl |
+| **Dependency caching** | `actions/cache` or built-in (`setup-node`, etc.) | Plugin-based (e.g., Artifactory cache) |
+| **Immutable logs** | GitHub-hosted, tamper-proof | Self-managed, needs backup strategy |

@@ -1,0 +1,709 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  REUSABLE INTEGRATION CI — Service Containers, Parallel Test Stages, Docker
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  Jenkins Shared Library equivalents demonstrated:
+#  ┌──────────────────────────────────┬──────────────────────────────────────────┐
+#  │ Jenkins Feature                  │ GHA Equivalent                          │
+#  ├──────────────────────────────────┼──────────────────────────────────────────┤
+#  │ docker.image('pg:16').inside {}  │ services: postgres (job-level sidecar)  │
+#  │ agent { docker { image '...' }} │ container: image (run job in container) │
+#  │ parallel { sanity{}; regr{} }   │ Separate parallel jobs (needs graph)    │
+#  │ docker.build(); docker.push()   │ docker/build-push-action + GHCR        │
+#  │ environment { STAGE = 'staging'}│ environment: staging (with approvals)   │
+#  │ lock(resource: 'deploy-prod')   │ concurrency: group (GHA native)         │
+#  │ Jenkins pipeline: stages graph  │ needs: [job1, job2] (DAG execution)     │
+#  │ Shared lib: call(body)          │ Reusable workflow (workflow_call)        │
+#  └──────────────────────────────────┴──────────────────────────────────────────┘
+#
+#  Graph:
+#    sanity ──────┐
+#    regression ──┼──→ docker-build ──→ deploy-staging ──→ deploy-production
+#    performance ─┘
+#
+#  Usage:
+#    jobs:
+#      integration:
+#        uses: org/shared-workflows/.github/workflows/reusable-integration-ci.yml@main
+#        with:
+#          language: python
+#          language_version: "3.12"
+#          language_versions: '["3.11", "3.12", "3.13"]'
+#          enable_docker_build: true
+#          docker_image_name: "sample-app-python"
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Reusable Integration CI
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "Programming language: python, node, or go"
+        required: true
+        type: string
+      language_version:
+        description: "Primary language version"
+        required: true
+        type: string
+      language_versions:
+        description: "JSON array of versions for regression matrix (e.g., '[\"3.11\", \"3.12\"]')"
+        required: false
+        type: string
+        default: ""
+      working_directory:
+        description: "Path to source code"
+        required: false
+        type: string
+        default: "."
+      enable_sanity:
+        description: "Run sanity (smoke) tests"
+        required: false
+        type: boolean
+        default: true
+      enable_regression:
+        description: "Run full regression test suite"
+        required: false
+        type: boolean
+        default: true
+      enable_performance:
+        description: "Run performance/load tests"
+        required: false
+        type: boolean
+        default: false
+      enable_docker_build:
+        description: "Build and push Docker image"
+        required: false
+        type: boolean
+        default: false
+      docker_image_name:
+        description: "Docker image name (without registry prefix)"
+        required: false
+        type: string
+        default: ""
+      docker_registry:
+        description: "Docker registry (ghcr.io, docker.io, etc.)"
+        required: false
+        type: string
+        default: "ghcr.io"
+      enable_deploy_staging:
+        description: "Deploy to staging environment"
+        required: false
+        type: boolean
+        default: false
+      enable_deploy_production:
+        description: "Deploy to production environment (requires approval)"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+# ═══════════════════════════════════════════════════════════
+#  JOB 1 — SANITY TESTS (smoke tests with service containers)
+#
+#  Jenkins equivalent:
+#    stage('Sanity') {
+#      agent { docker { image 'python:3.12' } }
+#      steps {
+#        script {
+#          docker.image('postgres:16').withRun('-e POSTGRES_PASSWORD=test') { c ->
+#            sh 'pytest tests/test_sanity.py -v'
+#          }
+#        }
+#      }
+#    }
+# ═══════════════════════════════════════════════════════════
+jobs:
+  sanity:
+    name: "Sanity Tests"
+    if: ${{ inputs.enable_sanity }}
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+
+    # ── Service Containers (GHA-native, no Docker-in-Docker needed) ──
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://testuser:testpass@localhost:5432/testdb"
+      REDIS_URL: "redis://localhost:6379"
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: Wait for services
+        shell: bash
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U testuser 2>/dev/null && break
+            echo "  attempt $i/30..."
+            sleep 2
+          done
+          echo "Waiting for Redis..."
+          for i in $(seq 1 10); do
+            redis-cli -h localhost ping 2>/dev/null && break
+            sleep 1
+          done
+          echo "✅ All services ready"
+
+      - name: Run sanity tests
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          EXIT_CODE=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            TEST_PATH="tests/test_sanity.py"
+            [ -d "tests/sanity" ] && TEST_PATH="tests/sanity/"
+            [ ! -f "$TEST_PATH" ] && [ ! -d "$TEST_PATH" ] && TEST_PATH="tests/"
+            pytest "$TEST_PATH" -v --tb=short -m "sanity or smoke" 2>&1 || \
+            pytest "$TEST_PATH" -v --tb=short 2>&1
+            EXIT_CODE=$?
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npx jest --ci --verbose --testPathPattern="sanity|smoke" 2>&1 || \
+            npx jest --ci --verbose 2>&1
+            EXIT_CODE=$?
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go test -v -run "TestSanity|TestSmoke" ./... 2>&1 || \
+            go test -v -short ./... 2>&1
+            EXIT_CODE=$?
+          fi
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail if sanity tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 2 — REGRESSION TESTS (full suite, version matrix)
+  #
+  #  Jenkins equivalent:
+  #    stage('Regression') {
+  #      matrix {
+  #        axes { axis { name 'PYTHON_VERSION'; values '3.11', '3.12', '3.13' } }
+  #        stages {
+  #          stage('Test') {
+  #            agent { docker { image "python:${PYTHON_VERSION}" } }
+  #            steps { sh 'pytest tests/ -v --cov' }
+  #          }
+  #        }
+  #      }
+  #    }
+  # ═══════════════════════════════════════════════════════════
+  regression:
+    name: "Regression (${{ matrix.version }})"
+    if: ${{ inputs.enable_regression }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(inputs.language_versions || format('["{0}"]', inputs.language_version)) }}
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://testuser:testpass@localhost:5432/testdb"
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ matrix.version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+            pip install pytest-cov 2>/dev/null || true
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: Run regression tests
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          EXIT_CODE=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            TEST_PATH="tests/test_regression.py"
+            [ -d "tests/regression" ] && TEST_PATH="tests/regression/"
+            [ ! -f "$TEST_PATH" ] && [ ! -d "$TEST_PATH" ] && TEST_PATH="tests/"
+            pytest "$TEST_PATH" -v --tb=short --cov=src --cov-report=term-missing \
+              --junitxml=test-results-regression-${{ matrix.version }}.xml 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npx jest --ci --verbose --coverage --testPathPattern="regression" 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go test -v -race -coverprofile=coverage.out -run "TestRegression|Test[^S]" ./... 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          # Extract coverage
+          COVERAGE="N/A"
+          if [ "${{ inputs.language }}" = "python" ]; then
+            COVERAGE=$(grep "^TOTAL" test-output.txt | tail -1 | grep -oE '[0-9]+%' | tail -1 || echo "N/A")
+          elif [ "${{ inputs.language }}" = "go" ] && [ -f coverage.out ]; then
+            COVERAGE=$(go tool cover -func=coverage.out | grep "^total:" | awk '{print $NF}')
+          fi
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload regression results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-results-${{ matrix.version }}
+          path: |
+            **/test-results-regression-*.xml
+            **/test-output.txt
+            **/coverage.out
+          retention-days: 14
+
+      - name: Fail if regression tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 3 — PERFORMANCE TESTS
+  #
+  #  Jenkins equivalent:
+  #    stage('Performance') {
+  #      steps {
+  #        sh 'locust --headless --users 10 --spawn-rate 2 --run-time 30s'
+  #      }
+  #      post { always { perfReport '...' } }
+  #    }
+  # ═══════════════════════════════════════════════════════════
+  performance:
+    name: "Performance Tests"
+    if: ${{ inputs.enable_performance }}
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://testuser:testpass@localhost:5432/testdb"
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: Run performance tests
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          EXIT_CODE=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            TEST_PATH="tests/test_performance.py"
+            [ -d "tests/performance" ] && TEST_PATH="tests/performance/"
+            if [ -f "$TEST_PATH" ] || [ -d "$TEST_PATH" ]; then
+              pytest "$TEST_PATH" -v --tb=short 2>&1 | tee perf-output.txt
+              EXIT_CODE=${PIPESTATUS[0]}
+            else
+              echo "No performance tests found, skipping..."
+              EXIT_CODE=0
+            fi
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npx jest --ci --verbose --testPathPattern="performance|perf|benchmark" 2>&1 | tee perf-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go test -v -bench=. -benchmem -run="^$" ./... 2>&1 | tee perf-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload performance results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: "**/perf-output.txt"
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 4 — DOCKER BUILD & PUSH
+  #
+  #  Jenkins equivalent:
+  #    stage('Docker') {
+  #      steps {
+  #        script {
+  #          def img = docker.build("myapp:${env.BUILD_NUMBER}")
+  #          docker.withRegistry('https://registry.example.com', 'creds') {
+  #            img.push('latest')
+  #            img.push("${env.GIT_COMMIT[0..7]}")
+  #          }
+  #        }
+  #      }
+  #    }
+  # ═══════════════════════════════════════════════════════════
+  docker-build:
+    name: "Docker Build & Push"
+    if: ${{ inputs.enable_docker_build }}
+    needs: [sanity, regression]
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.docker_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.docker_registry }}/${{ github.repository_owner }}/${{ inputs.docker_image_name }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.working_directory }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image summary
+        run: |
+          echo "## 🐳 Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest:** ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 5 — DEPLOY STAGING
+  # ═══════════════════════════════════════════════════════════
+  deploy-staging:
+    name: "Deploy → Staging"
+    if: ${{ inputs.enable_deploy_staging && github.ref == 'refs/heads/main' }}
+    needs: [sanity, regression, docker-build]
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "Image: ${{ needs.docker-build.outputs.image_tag }}"
+          echo "Digest: ${{ needs.docker-build.outputs.image_digest }}"
+          # Placeholder: Add actual deployment commands (kubectl, aws ecs, etc.)
+          echo "✅ Deployed to staging"
+
+      - name: Staging summary
+        run: |
+          echo "## 🏗️ Staging Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** ${{ needs.docker-build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 6 — DEPLOY PRODUCTION (with approval gate)
+  #
+  #  Jenkins equivalent:
+  #    stage('Deploy Production') {
+  #      input message: 'Deploy to production?', submitter: 'admin'
+  #      steps { sh './deploy.sh production' }
+  #    }
+  # ═══════════════════════════════════════════════════════════
+  deploy-production:
+    name: "Deploy → Production"
+    if: ${{ inputs.enable_deploy_production && github.ref == 'refs/heads/main' }}
+    needs: [deploy-staging]
+    runs-on: ubuntu-latest
+    environment: production     # ← Requires manual approval
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          echo "Image: ${{ needs.docker-build.outputs.image_tag }}"
+          # Placeholder: Add actual deployment commands
+          echo "✅ Deployed to production"
+
+      - name: Production summary
+        run: |
+          echo "## 🏭 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** ${{ needs.docker-build.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Approved by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify Slack on deploy
+        if: success() && env.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: success
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          message: "🚀 Deployed to production"
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 7 — INTEGRATION SUMMARY
+  # ═══════════════════════════════════════════════════════════
+  integration-summary:
+    name: "Integration Summary"
+    if: always()
+    needs: [sanity, regression, performance, docker-build]
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    steps:
+      - name: Post integration summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const icon = (s) => s === 'success' ? '✅' : s === 'failure' ? '❌' : '⏭️';
+
+            const sanity = '${{ needs.sanity.result }}';
+            const regression = '${{ needs.regression.result }}';
+            const performance = '${{ needs.performance.result }}';
+            const docker = '${{ needs.docker-build.result }}';
+
+            const lines = [
+              '## 🔗 Integration CI Summary',
+              '',
+              '| Stage | Status |',
+              '|-------|--------|',
+              `| **Sanity Tests** | ${icon(sanity)} ${sanity} |`,
+              `| **Regression Tests** | ${icon(regression)} ${regression} |`,
+              `| **Performance Tests** | ${icon(performance)} ${performance} |`,
+              `| **Docker Build** | ${icon(docker)} ${docker} |`,
+              '',
+            ];
+
+            const anyFailed = [sanity, regression].some(s => s === 'failure');
+            lines.push(`**Overall: ${anyFailed ? '❌ Failed' : '✅ Passed'}**`);
+            lines.push('');
+            lines.push(`[View Full Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`);
+
+            const body = lines.join('\n');
+            const fs = require('fs');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
+
+            const prNumber = context.payload.pull_request?.number;
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
+
+      - name: Check overall status
+        shell: bash
+        run: |
+          FAILED=false
+          [[ "${{ needs.sanity.result }}" == "failure" ]] && FAILED=true
+          [[ "${{ needs.regression.result }}" == "failure" ]] && FAILED=true
+          if [ "$FAILED" = "true" ]; then
+            echo "::error::Integration CI failed"
+            exit 1
+          fi
+          echo "All integration checks passed"
+
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        with:
+          status: failure
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          message: "Integration CI failed"

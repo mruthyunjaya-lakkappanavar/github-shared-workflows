@@ -1,0 +1,643 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  REUSABLE MATRIX CI — Multi-Version × Multi-OS × Parallel Test Suites
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  Jenkins Shared Library equivalents demonstrated:
+#  ┌──────────────────────────────┬──────────────────────────────────────────┐
+#  │ Jenkins Feature              │ GHA Equivalent                          │
+#  ├──────────────────────────────┼──────────────────────────────────────────┤
+#  │ matrix { axes { axis {} } }  │ strategy.matrix + fromJSON()            │
+#  │ parallel { stage {} }        │ Matrix auto-parallelizes combinations   │
+#  │ agent { label 'linux/mac' }  │ runs-on: ${{ matrix.os }}               │
+#  │ tools { jdk '11'; jdk '17'} │ setup-* actions with ${{ matrix.ver }}   │
+#  │ post { always { junit } }   │ if: always() + upload-artifact          │
+#  │ stash/unstash                │ upload-artifact / download-artifact     │
+#  │ failFast false               │ strategy.fail-fast: false               │
+#  │ Scripted: currentBuild.desc  │ Job summary via $GITHUB_STEP_SUMMARY    │
+#  └──────────────────────────────┴──────────────────────────────────────────┘
+#
+#  Usage (consumer workflow):
+#    jobs:
+#      ci:
+#        uses: org/shared-workflows/.github/workflows/reusable-matrix-ci.yml@main
+#        with:
+#          language: node
+#          language_versions: '["18", "20", "22"]'
+#          os_matrix: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+#          test_types: '["unit", "integration"]'
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Reusable Matrix CI
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "Programming language: node, python, or go"
+        required: true
+        type: string
+      language_versions:
+        description: "JSON array of language versions (e.g., '[\"18\", \"20\", \"22\"]')"
+        required: true
+        type: string
+      os_matrix:
+        description: "JSON array of runner OS (e.g., '[\"ubuntu-latest\", \"macos-latest\"]')"
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      test_types:
+        description: "JSON array of test types to run in parallel (e.g., '[\"unit\", \"integration\"]')"
+        required: false
+        type: string
+        default: '["unit"]'
+      working_directory:
+        description: "Path to source code"
+        required: false
+        type: string
+        default: "."
+      enable_lint:
+        description: "Run linting job"
+        required: false
+        type: boolean
+        default: true
+      enable_security:
+        description: "Run security scanning job"
+        required: false
+        type: boolean
+        default: true
+      enable_build:
+        description: "Run build verification job"
+        required: false
+        type: boolean
+        default: false
+      build_script:
+        description: "Build command (e.g., 'npm run build', 'go build ./...')"
+        required: false
+        type: string
+        default: ""
+      coverage_threshold:
+        description: "Minimum code coverage percentage (0 to disable)"
+        required: false
+        type: number
+        default: 80
+      fail_fast:
+        description: "Stop all matrix jobs if one fails"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# ═══════════════════════════════════════════════════════════
+#  JOB 1 — LINT (single runner, no matrix needed)
+# ═══════════════════════════════════════════════════════════
+jobs:
+  lint:
+    name: "Lint"
+    if: ${{ inputs.enable_lint }}
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      error_count: ${{ steps.result.outputs.error_count }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ fromJSON(inputs.language_versions)[0] }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: Run linter
+        id: lint
+        shell: bash
+        run: |
+          set +e
+          ERROR_COUNT=0
+          EXIT_CODE=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            OUTPUT=$(flake8 . --count --max-complexity=10 --max-line-length=127 --statistics 2>&1)
+            EXIT_CODE=$?
+            ERROR_COUNT=$(echo "$OUTPUT" | tail -1 | grep -oE '^[0-9]+' || echo "0")
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            OUTPUT=$(npx eslint . --max-warnings=0 2>&1)
+            EXIT_CODE=$?
+            [ "$EXIT_CODE" -ne 0 ] && ERROR_COUNT=$(echo "$OUTPUT" | grep -oE '[0-9]+ error' | head -1 | grep -oE '[0-9]+' || echo "1")
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2 2>/dev/null
+            export PATH="$(go env GOPATH)/bin:$PATH"
+            OUTPUT=$(golangci-lint run --out-format=line-number 2>&1)
+            EXIT_CODE=$?
+            [ "$EXIT_CODE" -ne 0 ] && ERROR_COUNT=$(echo "$OUTPUT" | wc -l | tr -d ' ')
+          fi
+
+          echo "$OUTPUT"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          echo "error_count=${ERROR_COUNT:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.lint.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+          echo "error_count=${{ steps.lint.outputs.error_count }}" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on lint errors
+        if: steps.lint.outputs.exit_code != '0'
+        run: exit 1
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 2 — TEST MATRIX (version × OS × test_type)
+  #
+  #  Jenkins equivalent:
+  #    matrix {
+  #      axes {
+  #        axis { name 'NODE_VERSION'; values '18', '20', '22' }
+  #        axis { name 'OS'; values 'linux', 'mac', 'windows' }
+  #        axis { name 'TEST_TYPE'; values 'unit', 'integration' }
+  #      }
+  #    }
+  # ═══════════════════════════════════════════════════════════
+  test:
+    name: "Test (${{ matrix.version }}, ${{ matrix.os }}, ${{ matrix.test_type }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: ${{ inputs.fail_fast }}
+      matrix:
+        version: ${{ fromJSON(inputs.language_versions) }}
+        os: ${{ fromJSON(inputs.os_matrix) }}
+        test_type: ${{ fromJSON(inputs.test_types) }}
+    outputs:
+      # Note: matrix jobs output the LAST completed value; summary job reads artifacts
+      status: ${{ steps.result.outputs.status }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ matrix.version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+            pip install pytest-cov 2>/dev/null || true
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: "Run tests (${{ matrix.test_type }})"
+        id: tests
+        shell: bash
+        env:
+          TEST_TYPE: ${{ matrix.test_type }}
+        run: |
+          set +e
+          TOTAL=0; PASSED=0; FAILED=0; EXIT_CODE=0; COVERAGE="N/A"
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            # Convention: tests/<test_type>/ or tests/test_<test_type>.py
+            TEST_PATH="tests/"
+            if [ -d "tests/${TEST_TYPE}" ]; then
+              TEST_PATH="tests/${TEST_TYPE}/"
+            elif [ -f "tests/test_${TEST_TYPE}.py" ]; then
+              TEST_PATH="tests/test_${TEST_TYPE}.py"
+            fi
+            pytest "$TEST_PATH" --junitxml=test-results.xml --tb=short -v \
+              --cov=src --cov-report=term-missing 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+            if [ -f test-results.xml ]; then
+              TOTAL=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          r = ET.parse('test-results.xml').getroot()
+          print(r.attrib.get('tests', '0'))" 2>/dev/null || echo "0")
+              FAIL_COUNT=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          r = ET.parse('test-results.xml').getroot()
+          print(int(r.attrib.get('failures','0')) + int(r.attrib.get('errors','0')))" 2>/dev/null || echo "0")
+              FAILED=${FAIL_COUNT:-0}; PASSED=$((TOTAL - FAILED))
+            fi
+            COV_LINE=$(grep "^TOTAL" test-output.txt | tail -1)
+            [ -n "$COV_LINE" ] && COVERAGE=$(echo "$COV_LINE" | grep -oE '[0-9]+%' | tail -1)
+
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            # Convention: jest --testPathPattern for test type selection
+            TEST_PATTERN=""
+            if [ "$TEST_TYPE" = "unit" ]; then
+              TEST_PATTERN="tests/unit"
+            elif [ "$TEST_TYPE" = "integration" ]; then
+              TEST_PATTERN="tests/integration"
+            fi
+            if [ -n "$TEST_PATTERN" ] && [ -d "$TEST_PATTERN" ]; then
+              npx jest --ci --verbose --coverage --testPathPattern="$TEST_PATTERN" 2>&1 | tee test-output.txt
+            else
+              npx jest --ci --verbose --coverage 2>&1 | tee test-output.txt
+            fi
+            EXIT_CODE=${PIPESTATUS[0]}
+            SUMMARY=$(grep "Tests:" test-output.txt | tail -1)
+            TOTAL=$(echo "$SUMMARY" | grep -oE '[0-9]+ total' | grep -oE '[0-9]+' || echo "0")
+            PASSED=$(echo "$SUMMARY" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
+            FAILED=$(echo "$SUMMARY" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
+            COV_LINE=$(grep "All files" test-output.txt | head -1)
+            if [ -n "$COV_LINE" ]; then
+              COVERAGE=$(echo "$COV_LINE" | awk -F'|' '{gsub(/ /,"",$2); print $2}')
+              [ "$COVERAGE" != "N/A" ] && [ -n "$COVERAGE" ] && COVERAGE="${COVERAGE}%"
+            fi
+
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            TEST_PATTERN="./..."
+            if [ "$TEST_TYPE" = "unit" ]; then
+              TEST_PATTERN="-run 'Test[^I]|TestI[^n]' ./..."
+            elif [ "$TEST_TYPE" = "integration" ]; then
+              TEST_PATTERN="-run 'TestIntegration' ./..."
+            fi
+            eval go test -v -race -coverprofile=coverage.out $TEST_PATTERN 2>&1 | tee test-output.txt
+            EXIT_CODE=${PIPESTATUS[0]}
+            PASSED=$(grep -c "^--- PASS" test-output.txt || echo "0")
+            FAILED=$(grep -c "^--- FAIL" test-output.txt || echo "0")
+            TOTAL=$((PASSED + FAILED))
+            [ -f coverage.out ] && COVERAGE=$(go tool cover -func=coverage.out 2>/dev/null | grep "^total:" | awk '{print $NF}')
+          fi
+
+          TOTAL=${TOTAL:-0}; PASSED=${PASSED:-0}; FAILED=${FAILED:-0}; COVERAGE=${COVERAGE:-N/A}
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.tests.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write result to file for aggregation
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p test-results
+          cat > test-results/result-${{ matrix.version }}-${{ matrix.os }}-${{ matrix.test_type }}.json << 'RESULT_EOF'
+          {
+            "version": "${{ matrix.version }}",
+            "os": "${{ matrix.os }}",
+            "test_type": "${{ matrix.test_type }}",
+            "status": "${{ steps.result.outputs.status }}",
+            "total": "${{ steps.tests.outputs.total }}",
+            "passed": "${{ steps.tests.outputs.passed }}",
+            "failed": "${{ steps.tests.outputs.failed }}",
+            "coverage": "${{ steps.tests.outputs.coverage }}"
+          }
+          RESULT_EOF
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.version }}-${{ matrix.os }}-${{ matrix.test_type }}
+          path: |
+            **/test-results/
+            **/test-results.xml
+            **/test-output.txt
+            **/coverage.out
+          retention-days: 14
+
+      - name: Fail if tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 3 — SECURITY SCAN (single runner)
+  # ═══════════════════════════════════════════════════════════
+  security:
+    name: "Security Scan"
+    if: ${{ inputs.enable_security }}
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      total_findings: ${{ steps.result.outputs.total_findings }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ fromJSON(inputs.language_versions)[0] }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+            pip install bandit pip-audit
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+            go install github.com/securego/gosec/v2/cmd/gosec@latest
+            go install golang.org/x/vuln/cmd/govulncheck@latest
+          fi
+
+      - name: SAST + Dependency Audit
+        id: scan
+        shell: bash
+        run: |
+          set +e
+          SAST_FINDINGS=0
+          DEP_FINDINGS=0
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            bandit -r src/ -f screen 2>&1; SAST_FINDINGS=$(bandit -r src/ -f json 2>/dev/null | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('results',[])))" 2>/dev/null || echo "0")
+            pip-audit --desc --format columns 2>&1; [ $? -ne 0 ] && DEP_FINDINGS=1
+          elif [ "${{ inputs.language }}" = "node" ]; then
+            npx eslint . --rule '{"no-eval":"error"}' --max-warnings=0 2>&1; [ $? -ne 0 ] && SAST_FINDINGS=1
+            npm audit 2>&1; [ $? -ne 0 ] && DEP_FINDINGS=1
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            gosec -fmt text ./... 2>&1; [ $? -ne 0 ] && SAST_FINDINGS=1
+            govulncheck ./... 2>&1; [ $? -ne 0 ] && DEP_FINDINGS=1
+          fi
+
+          echo "sast_findings=${SAST_FINDINGS:-0}" >> "$GITHUB_OUTPUT"
+          echo "dep_findings=${DEP_FINDINGS:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: "fs"
+          scan-ref: ${{ inputs.working_directory }}
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Aggregate security results
+        id: result
+        if: always()
+        shell: bash
+        run: |
+          TOTAL=$(( ${{ steps.scan.outputs.sast_findings }} + ${{ steps.scan.outputs.dep_findings }} ))
+          echo "total_findings=$TOTAL" >> "$GITHUB_OUTPUT"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 4 — BUILD VERIFICATION
+  # ═══════════════════════════════════════════════════════════
+  build:
+    name: "Build"
+    if: ${{ inputs.enable_build }}
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ fromJSON(inputs.language_versions)[0] }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            go mod download
+          fi
+
+      - name: Run build
+        id: build
+        shell: bash
+        run: |
+          set +e
+          BUILD_CMD="${{ inputs.build_script }}"
+          if [ -z "$BUILD_CMD" ]; then
+            if [ "${{ inputs.language }}" = "node" ]; then
+              BUILD_CMD="npm run build"
+            elif [ "${{ inputs.language }}" = "go" ]; then
+              BUILD_CMD="go build ./..."
+            elif [ "${{ inputs.language }}" = "python" ]; then
+              BUILD_CMD="python -m py_compile src/*.py"
+            fi
+          fi
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Set result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.build.outputs.exit_code }}" = "0" ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload build artifacts
+        if: success() && inputs.language == 'node'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            dist/
+            lib/
+          retention-days: 14
+
+      - name: Fail if build failed
+        if: steps.build.outputs.exit_code != '0'
+        run: exit 1
+
+  # ═══════════════════════════════════════════════════════════
+  #  JOB 5 — MATRIX SUMMARY
+  #
+  #  Jenkins equivalent:
+  #    post { always { script { currentBuild.description = ... } } }
+  #
+  #  Aggregates results from ALL matrix combinations and posts
+  #  a rich Markdown summary table on the PR.
+  # ═══════════════════════════════════════════════════════════
+  summary:
+    name: "Matrix CI Summary"
+    if: always()
+    needs: [lint, test, security, build]
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    steps:
+      - name: Download all test result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: all-results/
+          merge-multiple: false
+
+      - name: Generate matrix summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const icon = (s) => s === 'success' ? '✅' : s === 'failure' ? '❌' : '⏭️';
+
+            // Collect matrix test results from artifacts
+            const results = [];
+            const baseDir = 'all-results';
+            if (fs.existsSync(baseDir)) {
+              const dirs = fs.readdirSync(baseDir);
+              for (const dir of dirs) {
+                const resultDir = path.join(baseDir, dir, 'test-results');
+                if (fs.existsSync(resultDir)) {
+                  const files = fs.readdirSync(resultDir).filter(f => f.endsWith('.json'));
+                  for (const file of files) {
+                    try {
+                      const data = JSON.parse(fs.readFileSync(path.join(resultDir, file), 'utf8'));
+                      results.push(data);
+                    } catch(e) { /* skip malformed */ }
+                  }
+                }
+              }
+            }
+
+            // Build summary
+            const lintResult = '${{ needs.lint.result }}';
+            const secResult = '${{ needs.security.result }}';
+            const buildResult = '${{ needs.build.result }}';
+
+            let lines = [
+              '## 🧪 Matrix CI Summary',
+              '',
+              '### Job Status',
+              '| Job | Status |',
+              '|-----|--------|',
+              `| **Lint** | ${icon(lintResult)} ${lintResult} |`,
+              `| **Security** | ${icon(secResult)} ${secResult} |`,
+              `| **Build** | ${icon(buildResult)} ${buildResult} |`,
+              '',
+            ];
+
+            if (results.length > 0) {
+              lines.push('### Test Matrix Results');
+              lines.push('| Version | OS | Test Type | Status | Tests | Passed | Failed | Coverage |');
+              lines.push('|---------|-----|-----------|--------|-------|--------|--------|----------|');
+              for (const r of results) {
+                const osShort = (r.os || '').replace('-latest', '');
+                lines.push(`| ${r.version} | ${osShort} | ${r.test_type} | ${icon(r.status)} | ${r.total} | ${r.passed} | ${r.failed} | ${r.coverage} |`);
+              }
+              lines.push('');
+            }
+
+            // Overall status
+            const anyFailed = [lintResult, secResult, buildResult].some(s => s === 'failure')
+              || results.some(r => r.status === 'failure');
+            const overall = anyFailed ? '❌ Failed' : '✅ Passed';
+            lines.push(`**Overall: ${overall}**`);
+            lines.push('');
+            lines.push(`[View Full Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`);
+
+            const body = lines.join('\n');
+
+            // Write to job summary
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
+
+            // Post PR comment
+            const prNumber = context.payload.pull_request?.number;
+            if (prNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
+
+      - name: Check overall status
+        shell: bash
+        run: |
+          FAILED=false
+          [[ "${{ needs.lint.result }}" == "failure" ]] && FAILED=true
+          [[ "${{ needs.test.result }}" == "failure" ]] && FAILED=true
+          [[ "${{ needs.security.result }}" == "failure" ]] && FAILED=true
+          [[ "${{ needs.build.result }}" == "failure" ]] && FAILED=true
+          if [ "$FAILED" = "true" ]; then
+            echo "::error::Matrix CI failed — check individual jobs above"
+            exit 1
+          fi
+          echo "All matrix CI checks passed"
+
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        with:
+          status: failure
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          message: "Matrix CI failed for ${{ inputs.language }}"

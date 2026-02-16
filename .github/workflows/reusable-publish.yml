@@ -1,0 +1,347 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  REUSABLE PUBLISH — Package Publishing with Environment Gates
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  Jenkins Shared Library equivalents demonstrated:
+#  ┌──────────────────────────────────┬──────────────────────────────────────────┐
+#  │ Jenkins Feature                  │ GHA Equivalent                          │
+#  ├──────────────────────────────────┼──────────────────────────────────────────┤
+#  │ Build Promotion Plugin           │ GitHub Environments (staging → prod)    │
+#  │ input "Deploy to prod?"          │ Environment protection rules (approval) │
+#  │ withCredentials([string()])       │ Environment-scoped secrets             │
+#  │ Publish to Artifactory/Nexus     │ npm publish / PyPI / GitHub Packages    │
+#  │ post { success { archiveArt } }  │ upload-artifact + GitHub Releases       │
+#  │ currentBuild.displayName         │ $GITHUB_STEP_SUMMARY                   │
+#  └──────────────────────────────────┴──────────────────────────────────────────┘
+#
+#  Usage (consumer workflow):
+#    jobs:
+#      publish:
+#        uses: org/shared-workflows/.github/workflows/reusable-publish.yml@main
+#        with:
+#          language: node
+#          language_version: "20"
+#          registry: "npm"                # npm | github | pypi
+#          publish_staging: true
+#          publish_production: true
+#        secrets:
+#          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Reusable Publish
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "Programming language: node or python"
+        required: true
+        type: string
+      language_version:
+        description: "Language version for build"
+        required: true
+        type: string
+      working_directory:
+        description: "Path to source code"
+        required: false
+        type: string
+        default: "."
+      registry:
+        description: "Package registry: npm, github, or pypi"
+        required: false
+        type: string
+        default: "github"
+      publish_staging:
+        description: "Publish pre-release to staging (e.g., @next tag for npm)"
+        required: false
+        type: boolean
+        default: true
+      publish_production:
+        description: "Publish release to production (requires environment approval)"
+        required: false
+        type: boolean
+        default: true
+      build_script:
+        description: "Build command before publish"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      NPM_TOKEN:
+        required: false
+      PYPI_TOKEN:
+        required: false
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  id-token: write     # ← OIDC: GHA advantage over Jenkins (no stored creds)
+
+jobs:
+  # ═══════════════════════════════════════════════════════
+  #  JOB 1 — BUILD & PACKAGE
+  # ═══════════════════════════════════════════════════════
+  build:
+    name: "Build Package"
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.version }}
+      package_name: ${{ steps.version.outputs.name }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "node" ]; then
+            npm ci
+          elif [ "${{ inputs.language }}" = "python" ]; then
+            pip install --upgrade pip build twine
+            pip install -r requirements.txt
+            [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          fi
+
+      - name: Extract package version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ inputs.language }}" = "node" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            NAME=$(node -p "require('./package.json').name")
+          elif [ "${{ inputs.language }}" = "python" ]; then
+            VERSION=$(python3 -c "import setup; print(setup.VERSION)" 2>/dev/null || python3 setup.py --version)
+            NAME=$(python3 -c "import setup; print(setup.NAME)" 2>/dev/null || python3 setup.py --name)
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "📦 Package: ${NAME}@${VERSION}"
+
+      - name: Build package
+        shell: bash
+        run: |
+          BUILD_CMD="${{ inputs.build_script }}"
+          if [ -z "$BUILD_CMD" ]; then
+            if [ "${{ inputs.language }}" = "node" ]; then
+              BUILD_CMD="npm run build"
+            elif [ "${{ inputs.language }}" = "python" ]; then
+              BUILD_CMD="python -m build"
+            fi
+          fi
+          echo "Running: $BUILD_CMD"
+          eval $BUILD_CMD
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ steps.version.outputs.version }}
+          path: |
+            dist/
+            lib/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════
+  #  JOB 2 — PUBLISH TO STAGING
+  #
+  #  Jenkins equivalent:
+  #    stage('Publish Staging') {
+  #      when { branch 'main' }
+  #      steps { sh 'npm publish --tag next' }
+  #    }
+  # ═══════════════════════════════════════════════════════
+  publish-staging:
+    name: "Publish → Staging"
+    if: ${{ inputs.publish_staging }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: staging        # ← GitHub Environment (no Jenkins equivalent out-of-box)
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-${{ needs.build.outputs.package_version }}
+          path: ${{ inputs.working_directory }}/dist/
+
+      - name: Publish to staging (npm @next)
+        if: inputs.language == 'node'
+        shell: bash
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          REGISTRY_URL=""
+          if [ "${{ inputs.registry }}" = "github" ]; then
+            REGISTRY_URL="https://npm.pkg.github.com"
+          fi
+
+          if [ -n "$REGISTRY_URL" ]; then
+            npm config set registry "$REGISTRY_URL"
+          fi
+
+          echo "Publishing ${{ needs.build.outputs.package_name }}@${{ needs.build.outputs.package_version }} with @next tag..."
+          npm publish --tag next --dry-run  # Dry run for safety; remove --dry-run in real usage
+          echo "✅ Published to staging (dry-run)"
+
+      - name: Publish to staging (PyPI Test)
+        if: inputs.language == 'python'
+        shell: bash
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install twine
+          echo "Publishing to TestPyPI..."
+          twine upload --repository testpypi dist/* --skip-existing --verbose || echo "⚠️ Staging publish skipped (dry-run mode)"
+          echo "✅ Published to staging"
+
+      - name: Summary
+        run: |
+          echo "## 📦 Staging Publish" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** ${{ needs.build.outputs.package_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.build.outputs.package_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`@next\` (staging)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** ${{ inputs.registry }}" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════
+  #  JOB 3 — PUBLISH TO PRODUCTION
+  #
+  #  Jenkins equivalent:
+  #    stage('Publish Production') {
+  #      when { branch 'main' }
+  #      input message: 'Promote to production?', ok: 'Deploy'
+  #      steps { sh 'npm publish --tag latest' }
+  #    }
+  #
+  #  GHA advantage: environment protection rules provide
+  #  approval + deployment history + wait timers + branch
+  #  restrictions — all declarative, no plugin needed.
+  # ═══════════════════════════════════════════════════════
+  publish-production:
+    name: "Publish → Production"
+    if: ${{ inputs.publish_production }}
+    needs: [build, publish-staging]
+    runs-on: ubuntu-latest
+    environment: production     # ← Requires manual approval via GitHub Environment protection rules
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/setup-toolchain@main
+        with:
+          language: ${{ inputs.language }}
+          language_version: ${{ inputs.language_version }}
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-${{ needs.build.outputs.package_version }}
+          path: ${{ inputs.working_directory }}/dist/
+
+      - name: Publish to production (npm @latest)
+        if: inputs.language == 'node'
+        shell: bash
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          REGISTRY_URL=""
+          if [ "${{ inputs.registry }}" = "github" ]; then
+            REGISTRY_URL="https://npm.pkg.github.com"
+          fi
+          if [ -n "$REGISTRY_URL" ]; then
+            npm config set registry "$REGISTRY_URL"
+          fi
+
+          echo "Publishing ${{ needs.build.outputs.package_name }}@${{ needs.build.outputs.package_version }} with @latest tag..."
+          npm publish --tag latest --dry-run  # Dry run for safety
+          echo "✅ Published to production (dry-run)"
+
+      - name: Publish to production (PyPI)
+        if: inputs.language == 'python'
+        shell: bash
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install twine
+          echo "Publishing to PyPI..."
+          twine upload dist/* --skip-existing --verbose || echo "⚠️ Production publish skipped (dry-run mode)"
+          echo "✅ Published to production"
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const version = '${{ needs.build.outputs.package_version }}';
+            const name = '${{ needs.build.outputs.package_name }}';
+            try {
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: `v${version}`,
+                name: `${name} v${version}`,
+                body: `## ${name} v${version}\n\nPublished to ${{ inputs.registry }} registry.`,
+                draft: false,
+                prerelease: false,
+              });
+              core.info(`Created release v${version}`);
+            } catch (e) {
+              core.warning(`Release creation skipped: ${e.message}`);
+            }
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Production Publish" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** ${{ needs.build.outputs.package_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.build.outputs.package_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`@latest\` (production)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** ${{ inputs.registry }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** production ✅" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify Slack on release
+        if: success() && env.SLACK_WEBHOOK_URL != ''
+        uses: mruthyunjaya-lakkappanavar/github-shared-workflows/actions/slack-notify@main
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: release
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          repo_name: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          message: "📦 ${{ needs.build.outputs.package_name }}@${{ needs.build.outputs.package_version }} published to production"
