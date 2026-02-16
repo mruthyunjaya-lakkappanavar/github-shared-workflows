@@ -265,14 +265,17 @@ jobs:
 
           elif [ "${{ inputs.language }}" = "node" ]; then
             # Convention: jest --testPathPattern for test type selection
+            # Only collect coverage for unit tests (integration tests cover fewer branches)
             TEST_PATTERN=""
+            COVERAGE_FLAG="--coverage"
             if [ "$TEST_TYPE" = "unit" ]; then
               TEST_PATTERN="tests/unit"
             elif [ "$TEST_TYPE" = "integration" ]; then
               TEST_PATTERN="tests/integration"
+              COVERAGE_FLAG=""
             fi
             if [ -n "$TEST_PATTERN" ] && [ -d "$TEST_PATTERN" ]; then
-              npx jest --ci --verbose --coverage --testPathPattern="$TEST_PATTERN" 2>&1 | tee test-output.txt
+              npx jest --ci --verbose $COVERAGE_FLAG --testPathPattern="$TEST_PATTERN" 2>&1 | tee test-output.txt
             else
               npx jest --ci --verbose --coverage 2>&1 | tee test-output.txt
             fi
