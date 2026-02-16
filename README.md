@@ -2,7 +2,7 @@
 
 [![CI Shared Workflows](https://img.shields.io/badge/Reusable_Workflows-Active-2ea043?style=flat-square&logo=github-actions)](https://github.com/mruthyunjaya-lakkappanavar/github-shared-workflows)
 [![Dashboard](https://img.shields.io/badge/Dashboard-Live-58a6ff?style=flat-square&logo=github)](https://mruthyunjaya-lakkappanavar.github.io/github-shared-workflows/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
 
 > **Central reusable GitHub Actions workflows** — a migration path from Jenkins Shared Libraries to GitHub-native CI/CD.
 
@@ -175,4 +175,4 @@ Live at: [mruthyunjaya-lakkappanavar.github.io/github-shared-workflows](https://
 
 ## License
 
-MIT
+Apache 2.0
