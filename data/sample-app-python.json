@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-02-16T12:13:23Z",
+  "generated_at": "2026-02-16T18:12:31Z",
   "runs": [
+    {
+      "id": 22063197517,
+      "name": "Release",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22063197517",
+      "created_at": "2026-02-16T12:43:19Z",
+      "updated_at": "2026-02-16T12:43:33Z",
+      "head_branch": "main",
+      "head_sha": "1b897932c19b840464c910c037f04c2241c2e32f",
+      "event": "push",
+      "run_number": 14,
+      "run_started_at": "2026-02-16T12:43:19Z",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 22063065403,
+      "name": "Guard PRs",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22063065403",
+      "created_at": "2026-02-16T12:39:04Z",
+      "updated_at": "2026-02-16T12:39:12Z",
+      "head_branch": "chore/license-apache-2.0",
+      "head_sha": "233cd1160d507099402fee8f6e15dce5cac8ac87",
+      "event": "pull_request_target",
+      "run_number": 1,
+      "run_started_at": "2026-02-16T12:39:04Z",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 22061979757,
       "name": "Release",
@@ -234,63 +270,26 @@
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    },
-    {
-      "id": 21985602609,
-      "name": "CI",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985602609",
-      "created_at": "2026-02-13T11:43:47Z",
-      "updated_at": "2026-02-13T11:44:18Z",
-      "head_branch": "main",
-      "head_sha": "5b091aa0771d6d35c4cf0ee07ab316ad090de729",
-      "event": "push",
-      "run_number": 15,
-      "run_started_at": "2026-02-13T11:43:47Z",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 21985602596,
-      "name": "Release",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985602596",
-      "created_at": "2026-02-13T11:43:47Z",
-      "updated_at": "2026-02-13T11:44:04Z",
-      "head_branch": "main",
-      "head_sha": "5b091aa0771d6d35c4cf0ee07ab316ad090de729",
-      "event": "push",
-      "run_number": 8,
-      "run_started_at": "2026-02-13T11:43:47Z",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 21985017712,
-      "name": "CI",
-      "status": "completed",
-      "conclusion": "failure",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/21985017712",
-      "created_at": "2026-02-13T11:22:32Z",
-      "updated_at": "2026-02-13T11:23:12Z",
-      "head_branch": "demo/test-failure",
-      "head_sha": "a131f0c65bdee41f5128369cd227b8e7cb5780ce",
-      "event": "pull_request_target",
-      "run_number": 14,
-      "run_started_at": "2026-02-13T11:22:32Z",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
     }
   ],
   "jobs": [
+    {
+      "id": 63747886132,
+      "name": "check-contributor",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22063065403/job/63747886132",
+      "started_at": "2026-02-16T12:39:07Z",
+      "completed_at": "2026-02-16T12:39:11Z",
+      "run_id": 22063065403,
+      "run_number": 1,
+      "head_branch": "chore/license-apache-2.0",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 63709652526,
       "name": "integration / Sanity Tests",
@@ -718,22 +717,8 @@
     }
   ],
   "ciStats": {
-    "lint": {
-      "errors": "0"
-    },
-    "test": {
-      "total": "0",
-      "passed": "0",
-      "failed": "0",
-      "coverage": "92%"
-    },
-    "security": {
-      "sast": "0",
-      "deps": "0",
-      "critical": "0",
-      "high": "0",
-      "medium": "0",
-      "low": "0"
-    }
+    "lint": {},
+    "test": {},
+    "security": {}
   }
 }
