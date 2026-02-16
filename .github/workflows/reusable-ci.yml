@@ -31,6 +31,11 @@ on:
         required: false
         type: boolean
         default: true
+      coverage_threshold:
+        description: "Minimum code coverage percentage (0 to disable)"
+        required: false
+        type: number
+        default: 80
     secrets:
       SLACK_WEBHOOK_URL:
         required: false
@@ -586,7 +591,7 @@ jobs:
             const vulnLow      = '${{ needs.security.outputs.low }}'      || '0';
 
             // Coverage threshold check (95%)
-            const COVERAGE_THRESHOLD = 95;
+            const COVERAGE_THRESHOLD = ${{ inputs.coverage_threshold }};
             let covValue = parseFloat(testCoverage);
             let covIcon = '📊';
             let covDetail = testCoverage;
@@ -646,7 +651,7 @@ jobs:
           COV="${{ needs.test.outputs.coverage }}"
           COV_NUM=$(echo "$COV" | grep -oE '[0-9]+\.?[0-9]*' | head -1 || true)
           if [ -n "$COV_NUM" ]; then
-            THRESHOLD=95
+            THRESHOLD=${{ inputs.coverage_threshold }}
             if (( $(echo "$COV_NUM < $THRESHOLD" | bc -l) )); then
               echo "::error::Code coverage ${COV} is below the ${THRESHOLD}% threshold"
               FAILED=true
