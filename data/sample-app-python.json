@@ -1,6 +1,24 @@
 {
-  "generated_at": "2026-02-19T00:23:46Z",
+  "generated_at": "2026-02-19T06:23:46Z",
   "runs": [
+    {
+      "id": 22167740608,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608",
+      "created_at": "2026-02-19T03:50:05Z",
+      "updated_at": "2026-02-19T03:51:12Z",
+      "head_branch": "main",
+      "head_sha": "1b897932c19b840464c910c037f04c2241c2e32f",
+      "event": "schedule",
+      "run_number": 26,
+      "run_started_at": "2026-02-19T03:50:05Z",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 22125733012,
       "name": "CI",
@@ -216,27 +234,230 @@
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    },
+    }
+  ],
+  "jobs": [
     {
-      "id": 22050142631,
-      "name": "CI",
+      "id": 64098671054,
+      "name": "integration / Sanity Tests",
       "status": "completed",
       "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22050142631",
-      "created_at": "2026-02-16T04:28:51Z",
-      "updated_at": "2026-02-16T04:30:29Z",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671054",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:51:02Z",
+      "run_id": 22167740608,
+      "run_number": 26,
       "head_branch": "main",
-      "head_sha": "90e3bb203f9618e7c64353c9f66d03abdbe23241",
-      "event": "push",
-      "run_number": 19,
-      "run_started_at": "2026-02-16T04:28:51Z",
+      "event": "schedule",
       "actor": {
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    }
-  ],
-  "jobs": [
+    },
+    {
+      "id": 64098671056,
+      "name": "integration / Regression (3.12)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671056",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:49Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671070,
+      "name": "integration / Regression (3.13)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671070",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:54Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671073,
+      "name": "ci / Lint",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671073",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:26Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671075,
+      "name": "ci / Security Scan",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671075",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:44Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671080,
+      "name": "ci / Test",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671080",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:36Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671088,
+      "name": "integration / Regression (3.11)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671088",
+      "started_at": "2026-02-19T03:50:08Z",
+      "completed_at": "2026-02-19T03:50:52Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098671172,
+      "name": "integration / Performance Tests",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098671172",
+      "started_at": "2026-02-19T03:50:06Z",
+      "completed_at": "2026-02-19T03:50:06Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098713828,
+      "name": "ci / CI Status",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098713828",
+      "started_at": "2026-02-19T03:50:46Z",
+      "completed_at": "2026-02-19T03:50:49Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098733106,
+      "name": "integration / Integration Summary",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098733106",
+      "started_at": "2026-02-19T03:51:05Z",
+      "completed_at": "2026-02-19T03:51:11Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098733270,
+      "name": "integration / Docker Build & Push",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098733270",
+      "started_at": "2026-02-19T03:51:02Z",
+      "completed_at": "2026-02-19T03:51:02Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098733313,
+      "name": "integration / Deploy → Production",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098733313",
+      "started_at": "2026-02-19T03:51:02Z",
+      "completed_at": "2026-02-19T03:51:02Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
+    {
+      "id": 64098733322,
+      "name": "integration / Deploy → Staging",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608/job/64098733322",
+      "started_at": "2026-02-19T03:51:02Z",
+      "completed_at": "2026-02-19T03:51:02Z",
+      "run_id": 22167740608,
+      "run_number": 26,
+      "head_branch": "main",
+      "event": "schedule",
+      "actor": {
+        "login": "mruthyunjaya-lakkappanavar",
+        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
+      }
+    },
     {
       "id": 63955215134,
       "name": "integration / Regression (3.11)",
@@ -677,23 +898,6 @@
       "actor": {
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 63787062340,
-      "name": "check-contributor",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22074671763/job/63787062340",
-      "started_at": "2026-02-16T19:05:53Z",
-      "completed_at": "2026-02-16T19:05:59Z",
-      "run_id": 22074671763,
-      "run_number": 2,
-      "head_branch": "dependabot/github_actions/actions/github-script-8",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "dependabot[bot]",
-        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
       }
     }
   ],
