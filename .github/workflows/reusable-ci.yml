@@ -466,7 +466,7 @@ jobs:
           echo "::notice::Dependency audit found $DEP_FINDINGS issue(s)"
 
       - name: Trivy filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: "fs"
           scan-ref: ${{ inputs.working_directory }}
