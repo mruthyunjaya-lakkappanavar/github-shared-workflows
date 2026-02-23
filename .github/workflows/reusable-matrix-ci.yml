@@ -539,7 +539,7 @@ jobs:
 
     steps:
       - name: Download all test result artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: test-results-*
           path: all-results/
