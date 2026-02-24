@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-02-23T18:26:16Z",
+  "generated_at": "2026-02-24T00:22:37Z",
   "repos": {
     "sample-app-python": {
-      "generated_at": "2026-02-23T18:26:16Z",
+      "generated_at": "2026-02-24T00:22:37Z",
       "runs": [
         {
           "id": 22292262440,
@@ -218,24 +218,6 @@
           "actor": {
             "login": "dependabot[bot]",
             "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
-          }
-        },
-        {
-          "id": 22051181222,
-          "name": "Release",
-          "status": "completed",
-          "conclusion": "success",
-          "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22051181222",
-          "created_at": "2026-02-16T05:25:21Z",
-          "updated_at": "2026-02-16T05:25:44Z",
-          "head_branch": "main",
-          "head_sha": "3903174d4c3a217e3921a1622edeb5962d1927e0",
-          "event": "push",
-          "run_number": 12,
-          "run_started_at": "2026-02-16T05:25:21Z",
-          "actor": {
-            "login": "mruthyunjaya-lakkappanavar",
-            "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
           }
         }
       ],
@@ -925,7 +907,7 @@
       }
     },
     "sample-app-node": {
-      "generated_at": "2026-02-23T18:26:16Z",
+      "generated_at": "2026-02-24T00:22:37Z",
       "runs": [
         {
           "id": 22063197500,
@@ -1392,7 +1374,7 @@
       }
     },
     "sample-app-go": {
-      "generated_at": "2026-02-23T18:26:16Z",
+      "generated_at": "2026-02-24T00:22:37Z",
       "runs": [
         {
           "id": 22063197390,
