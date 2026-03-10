@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-03-09T18:17:16Z",
+  "generated_at": "2026-03-10T00:19:35Z",
   "repos": {
     "sample-app-python": {
-      "generated_at": "2026-03-09T18:17:16Z",
+      "generated_at": "2026-03-10T00:19:35Z",
       "runs": [
         {
           "id": 22471902507,
@@ -197,42 +197,6 @@
           "event": "push",
           "run_number": 14,
           "run_started_at": "2026-02-16T12:43:19Z",
-          "actor": {
-            "login": "mruthyunjaya-lakkappanavar",
-            "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-          }
-        },
-        {
-          "id": 22063065403,
-          "name": "Guard PRs",
-          "status": "completed",
-          "conclusion": "success",
-          "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22063065403",
-          "created_at": "2026-02-16T12:39:04Z",
-          "updated_at": "2026-02-16T12:39:12Z",
-          "head_branch": "chore/license-apache-2.0",
-          "head_sha": "233cd1160d507099402fee8f6e15dce5cac8ac87",
-          "event": "pull_request_target",
-          "run_number": 1,
-          "run_started_at": "2026-02-16T12:39:04Z",
-          "actor": {
-            "login": "mruthyunjaya-lakkappanavar",
-            "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-          }
-        },
-        {
-          "id": 22061979757,
-          "name": "Release",
-          "status": "completed",
-          "conclusion": "success",
-          "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22061979757",
-          "created_at": "2026-02-16T12:03:30Z",
-          "updated_at": "2026-02-16T12:03:47Z",
-          "head_branch": "main",
-          "head_sha": "f03c116e01f467f83e7629b32206982564b7e279",
-          "event": "push",
-          "run_number": 13,
-          "run_started_at": "2026-02-16T12:03:30Z",
           "actor": {
             "login": "mruthyunjaya-lakkappanavar",
             "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
@@ -925,7 +889,7 @@
       }
     },
     "sample-app-node": {
-      "generated_at": "2026-03-09T18:17:16Z",
+      "generated_at": "2026-03-10T00:19:35Z",
       "runs": [
         {
           "id": 22063197500,
@@ -1392,7 +1356,7 @@
       }
     },
     "sample-app-go": {
-      "generated_at": "2026-03-09T18:17:16Z",
+      "generated_at": "2026-03-10T00:19:35Z",
       "runs": [
         {
           "id": 22063197390,
