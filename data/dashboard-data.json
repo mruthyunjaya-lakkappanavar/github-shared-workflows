@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-03-30T18:20:16Z",
+  "generated_at": "2026-03-31T00:26:13Z",
   "repos": {
     "sample-app-python": {
-      "generated_at": "2026-03-30T18:20:16Z",
+      "generated_at": "2026-03-31T00:26:13Z",
       "runs": [
         {
           "id": 22471902507,
@@ -146,42 +146,6 @@
           "actor": {
             "login": "mruthyunjaya-lakkappanavar",
             "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-          }
-        },
-        {
-          "id": 22085251936,
-          "name": "CI",
-          "status": "completed",
-          "conclusion": "success",
-          "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22085251936",
-          "created_at": "2026-02-17T03:49:28Z",
-          "updated_at": "2026-02-17T03:50:32Z",
-          "head_branch": "main",
-          "head_sha": "1b897932c19b840464c910c037f04c2241c2e32f",
-          "event": "schedule",
-          "run_number": 24,
-          "run_started_at": "2026-02-17T03:49:28Z",
-          "actor": {
-            "login": "mruthyunjaya-lakkappanavar",
-            "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-          }
-        },
-        {
-          "id": 22074671763,
-          "name": "Guard PRs",
-          "status": "completed",
-          "conclusion": "success",
-          "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22074671763",
-          "created_at": "2026-02-16T19:05:50Z",
-          "updated_at": "2026-02-16T19:06:00Z",
-          "head_branch": "dependabot/github_actions/actions/github-script-8",
-          "head_sha": "783c893def5a8b452f98380cd9bd785507971641",
-          "event": "pull_request_target",
-          "run_number": 2,
-          "run_started_at": "2026-02-16T19:05:50Z",
-          "actor": {
-            "login": "dependabot[bot]",
-            "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
           }
         }
       ],
@@ -871,7 +835,7 @@
       }
     },
     "sample-app-node": {
-      "generated_at": "2026-03-30T18:20:16Z",
+      "generated_at": "2026-03-31T00:26:13Z",
       "runs": [
         {
           "id": 22063197500,
@@ -1338,7 +1302,7 @@
       }
     },
     "sample-app-go": {
-      "generated_at": "2026-03-30T18:20:16Z",
+      "generated_at": "2026-03-31T00:26:13Z",
       "runs": [
         {
           "id": 22063197390,
