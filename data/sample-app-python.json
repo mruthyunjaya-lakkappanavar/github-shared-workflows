@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-06T18:19:46Z",
+  "generated_at": "2026-04-07T00:27:25Z",
   "runs": [
     {
       "id": 22471902507,
@@ -104,42 +104,6 @@
       "event": "schedule",
       "run_number": 27,
       "run_started_at": "2026-02-20T03:48:41Z",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 22167740608,
-      "name": "CI",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22167740608",
-      "created_at": "2026-02-19T03:50:05Z",
-      "updated_at": "2026-02-19T03:51:12Z",
-      "head_branch": "main",
-      "head_sha": "1b897932c19b840464c910c037f04c2241c2e32f",
-      "event": "schedule",
-      "run_number": 26,
-      "run_started_at": "2026-02-19T03:50:05Z",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
-    },
-    {
-      "id": 22125733012,
-      "name": "CI",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/22125733012",
-      "created_at": "2026-02-18T03:50:19Z",
-      "updated_at": "2026-02-18T03:51:22Z",
-      "head_branch": "main",
-      "head_sha": "1b897932c19b840464c910c037f04c2241c2e32f",
-      "event": "schedule",
-      "run_number": 25,
-      "run_started_at": "2026-02-18T03:50:19Z",
       "actor": {
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
