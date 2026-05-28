@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-28T07:21:33Z",
+  "generated_at": "2026-05-28T13:14:46Z",
   "runs": [
     {
       "id": 22063197390,
@@ -462,42 +462,11 @@
         "login": "mruthyunjaya-lakkappanavar",
         "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
       }
-    },
-    {
-      "id": 63747901925,
-      "name": "check-contributor",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-go/actions/runs/22063069799/job/63747901925",
-      "started_at": "2026-02-16T12:39:31Z",
-      "completed_at": "2026-02-16T12:39:36Z",
-      "run_id": 22063069799,
-      "run_number": 1,
-      "head_branch": "chore/license-apache-2.0",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "mruthyunjaya-lakkappanavar",
-        "avatar_url": "https://avatars.githubusercontent.com/u/25620493?v=4"
-      }
     }
   ],
   "ciStats": {
-    "lint": {
-      "errors": "0"
-    },
-    "test": {
-      "total": "7",
-      "passed": "7",
-      "failed": "0",
-      "coverage": "71.4%"
-    },
-    "security": {
-      "sast": "1",
-      "deps": "0",
-      "critical": "0",
-      "high": "0",
-      "medium": "0",
-      "low": "0"
-    }
+    "lint": {},
+    "test": {},
+    "security": {}
   }
 }
