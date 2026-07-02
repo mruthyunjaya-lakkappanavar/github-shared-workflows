@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-02T13:50:10Z",
+  "generated_at": "2026-07-02T19:17:55Z",
   "runs": [
     {
       "id": 22063197390,
@@ -485,12 +485,7 @@
     "lint": {
       "errors": "0"
     },
-    "test": {
-      "total": "7",
-      "passed": "7",
-      "failed": "0",
-      "coverage": "71.4%"
-    },
+    "test": {},
     "security": {
       "sast": "1",
       "deps": "0",
