@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-12T01:27:36Z",
+  "generated_at": "2026-08-12T07:17:10Z",
   "repos": {
     "sample-app-python": {
-      "generated_at": "2026-08-12T01:27:36Z",
+      "generated_at": "2026-08-12T07:17:10Z",
       "runs": [
         {
           "id": 31418921172,
@@ -209,7 +209,7 @@
       }
     },
     "sample-app-node": {
-      "generated_at": "2026-08-12T01:27:36Z",
+      "generated_at": "2026-08-12T07:17:10Z",
       "runs": [
         {
           "id": 22063197500,
@@ -676,7 +676,7 @@
       }
     },
     "sample-app-go": {
-      "generated_at": "2026-08-12T01:27:36Z",
+      "generated_at": "2026-08-12T07:17:10Z",
       "runs": [
         {
           "id": 22063197390,
@@ -1159,9 +1159,7 @@
         }
       ],
       "ciStats": {
-        "lint": {
-          "errors": "0"
-        },
+        "lint": {},
         "test": {
           "total": "7",
           "passed": "7",
