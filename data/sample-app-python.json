@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-09-21T17:45:34Z",
+  "generated_at": "2026-09-21T21:37:53Z",
   "runs": [
+    {
+      "id": 35638163263,
+      "name": "Guard PRs",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/35638163263",
+      "created_at": "2026-09-21T18:24:19Z",
+      "updated_at": "2026-09-21T18:24:29Z",
+      "head_branch": "dependabot/pip/uvicorn-gte-0.53.0-and-lt-1.0.0",
+      "head_sha": "23f78aadeedcd769b47d08b9d1f751acfc09831f",
+      "event": "pull_request_target",
+      "run_number": 37,
+      "run_started_at": "2026-09-21T18:24:19Z",
+      "actor": {
+        "login": "dependabot[bot]",
+        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
+      }
+    },
+    {
+      "id": 35638154512,
+      "name": "Guard PRs",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/35638154512",
+      "created_at": "2026-09-21T18:24:14Z",
+      "updated_at": "2026-09-21T18:24:24Z",
+      "head_branch": "dependabot/pip/sqlalchemy-gte-2.0.54-and-lt-3.0.0",
+      "head_sha": "a55abf952bcb13e197c1d0ce30b255eb843ea249",
+      "event": "pull_request_target",
+      "run_number": 36,
+      "run_started_at": "2026-09-21T18:24:14Z",
+      "actor": {
+        "login": "dependabot[bot]",
+        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
+      }
+    },
     {
       "id": 34880611844,
       "name": "Guard PRs",
@@ -90,45 +126,43 @@
         "login": "dependabot[bot]",
         "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
       }
-    },
-    {
-      "id": 30841153460,
-      "name": "Guard PRs",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/30841153460",
-      "created_at": "2026-08-03T18:24:50Z",
-      "updated_at": "2026-08-03T18:25:05Z",
-      "head_branch": "dependabot/pip/fastapi-gte-0.141.1-and-lt-1.0.0",
-      "head_sha": "90b068f0cd9e8e97b868e525811d7ec78d1d16dc",
-      "event": "pull_request_target",
-      "run_number": 30,
-      "run_started_at": "2026-08-03T18:24:50Z",
-      "actor": {
-        "login": "dependabot[bot]",
-        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
-      }
-    },
-    {
-      "id": 30841141662,
-      "name": "Guard PRs",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/30841141662",
-      "created_at": "2026-08-03T18:24:41Z",
-      "updated_at": "2026-08-03T18:24:51Z",
-      "head_branch": "dependabot/pip/uvicorn-gte-0.52.0-and-lt-1.0.0",
-      "head_sha": "1e4fbe733faf80f7d7f9ac336272fb5ae68b5f12",
-      "event": "pull_request_target",
-      "run_number": 29,
-      "run_started_at": "2026-08-03T18:24:41Z",
-      "actor": {
-        "login": "dependabot[bot]",
-        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
-      }
     }
   ],
   "jobs": [
+    {
+      "id": 106460645052,
+      "name": "check-contributor",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/35638163263/job/106460645052",
+      "started_at": "2026-09-21T18:24:22Z",
+      "completed_at": "2026-09-21T18:24:28Z",
+      "run_id": 35638163263,
+      "run_number": 37,
+      "head_branch": "dependabot/pip/uvicorn-gte-0.53.0-and-lt-1.0.0",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "dependabot[bot]",
+        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
+      }
+    },
+    {
+      "id": 106460614966,
+      "name": "check-contributor",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/35638154512/job/106460614966",
+      "started_at": "2026-09-21T18:24:17Z",
+      "completed_at": "2026-09-21T18:24:23Z",
+      "run_id": 35638154512,
+      "run_number": 36,
+      "head_branch": "dependabot/pip/sqlalchemy-gte-2.0.54-and-lt-3.0.0",
+      "event": "pull_request_target",
+      "actor": {
+        "login": "dependabot[bot]",
+        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
+      }
+    },
     {
       "id": 104098693080,
       "name": "check-contributor",
@@ -140,40 +174,6 @@
       "run_id": 34880611844,
       "run_number": 35,
       "head_branch": "dependabot/pip/psycopg2-binary-gte-2.9.13-and-lt-3.0.0",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "dependabot[bot]",
-        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
-      }
-    },
-    {
-      "id": 97543523227,
-      "name": "check-contributor",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/32762238380/job/97543523227",
-      "started_at": "2026-08-24T18:24:30Z",
-      "completed_at": "2026-08-24T18:24:35Z",
-      "run_id": 32762238380,
-      "run_number": 34,
-      "head_branch": "dependabot/pip/uvicorn-gte-0.52.4-and-lt-1.0.0",
-      "event": "pull_request_target",
-      "actor": {
-        "login": "dependabot[bot]",
-        "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
-      }
-    },
-    {
-      "id": 95475991281,
-      "name": "check-contributor",
-      "status": "completed",
-      "conclusion": "success",
-      "html_url": "https://github.com/mruthyunjaya-lakkappanavar/sample-app-python/actions/runs/32059097850/job/95475991281",
-      "started_at": "2026-08-17T19:12:56Z",
-      "completed_at": "2026-08-17T19:13:00Z",
-      "run_id": 32059097850,
-      "run_number": 33,
-      "head_branch": "dependabot/pip/uvicorn-gte-0.52.3-and-lt-1.0.0",
       "event": "pull_request_target",
       "actor": {
         "login": "dependabot[bot]",
